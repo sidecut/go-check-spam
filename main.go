@@ -136,6 +136,7 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 				}
 				msgChan <- fullMsg
 			}(msg.Id)
+			fmt.Print(".")
 		}
 
 		// Start a goroutine to close channels when all workers are done
