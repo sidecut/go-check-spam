@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -106,6 +107,13 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 	var messages []*gmail.Message
 	pageToken := ""
 
+	// Create a channel to receive messages
+	msgChan := make(chan *gmail.Message)
+	// Create a channel to receive errors
+	errChan := make(chan error)
+	// Create a WaitGroup to track goroutines
+	var wg sync.WaitGroup
+
 	for {
 		req := srv.Users.Messages.List("me").LabelIds("SPAM")
 		if pageToken != "" {
@@ -116,20 +124,43 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 			return nil, fmt.Errorf("unable to retrieve messages: %v", err)
 		}
 
-		// Get full message details for each message
+		// Process messages in parallel
 		for _, msg := range r.Messages {
-			fullMsg, err := srv.Users.Messages.Get("me", msg.Id).Format("minimal").Do()
+			wg.Add(1)
+			go func(messageId string) {
+				defer wg.Done()
+				fullMsg, err := srv.Users.Messages.Get("me", messageId).Format("minimal").Do()
+				if err != nil {
+					errChan <- fmt.Errorf("unable to retrieve message details: %v", err)
+					return
+				}
+				msgChan <- fullMsg
+			}(msg.Id)
+		}
+
+		// Start a goroutine to close channels when all workers are done
+		go func() {
+			wg.Wait()
+			close(msgChan)
+			close(errChan)
+		}()
+
+		// Collect results
+		for msg := range msgChan {
+			messages = append(messages, msg)
+		}
+
+		// Check for any errors
+		for err := range errChan {
 			if err != nil {
-				return nil, fmt.Errorf("unable to retrieve message details: %v", err)
+				return nil, err
 			}
-			messages = append(messages, fullMsg)
 		}
 
 		pageToken = r.NextPageToken
 		if pageToken == "" {
 			break
 		}
-
 		fmt.Print(".")
 	}
 	fmt.Println("")
