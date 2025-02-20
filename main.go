@@ -129,7 +129,10 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 		if pageToken == "" {
 			break
 		}
+
+		fmt.Print(".")
 	}
+	fmt.Println("")
 	return messages, nil
 }
 
