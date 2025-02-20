@@ -107,9 +107,7 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 	pageToken := ""
 
 	for {
-		req := srv.Users.Messages.List("me").
-			LabelIds("SPAM").
-			Fields("messages(id,internalDate),nextPageToken")
+		req := srv.Users.Messages.List("me").LabelIds("SPAM")
 		if pageToken != "" {
 			req = req.PageToken(pageToken)
 		}
@@ -118,7 +116,14 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 			return nil, fmt.Errorf("unable to retrieve messages: %v", err)
 		}
 
-		messages = append(messages, r.Messages...)
+		// Get full message details for each message
+		for _, msg := range r.Messages {
+			fullMsg, err := srv.Users.Messages.Get("me", msg.Id).Format("minimal").Do()
+			if err != nil {
+				return nil, fmt.Errorf("unable to retrieve message details: %v", err)
+			}
+			messages = append(messages, fullMsg)
+		}
 
 		pageToken = r.NextPageToken
 		if pageToken == "" {
