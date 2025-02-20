@@ -107,7 +107,9 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 	pageToken := ""
 
 	for {
-		req := srv.Users.Messages.List("me").LabelIds("SPAM")
+		req := srv.Users.Messages.List("me").
+			LabelIds("SPAM").
+			Fields("messages(id,internalDate),nextPageToken")
 		if pageToken != "" {
 			req = req.PageToken(pageToken)
 		}
