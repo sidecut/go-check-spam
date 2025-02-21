@@ -200,7 +200,13 @@ func main() {
 	for _, date := range dates {
 		count := spamCounts[date]
 		total += count
-		fmt.Printf("%s: %d\n", date, count)
+		dateValue, err := time.Parse("2006-01-02", date)
+		if err != nil {
+			fmt.Printf("Error parsing date: %v\n", err)
+			continue
+		}
+		dayOfWeek := dateValue.Format("Mon")
+		fmt.Printf("%s, %s: %d\n", dayOfWeek, date, count)
 	}
 	fmt.Printf("Total: %d\n", total)
 }
