@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -13,6 +14,12 @@ import (
 	"google.golang.org/api/gmail/v1"
 	"google.golang.org/api/option"
 )
+
+var debug = flag.Bool("debug", false, "output debug information")
+
+func init() {
+	flag.Parse()
+}
 
 func getSpamCounts(srv *gmail.Service) (map[string]int, error) {
 	today := time.Now()
@@ -66,7 +73,9 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 		wg.Wait()
 		close(msgChan)
 		close(errChan)
-		print("All workers are done. Closing channels.\n")
+		if *debug {
+			print("All workers are done. Closing channels.\n")
+		}
 	}()
 
 	for {
@@ -82,7 +91,9 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 			if err == nil {
 				break
 			}
-			print("r")
+			if *debug {
+				print("r")
+			}
 			time.Sleep(time.Duration(fib.next()) * time.Second)
 		}
 
@@ -98,22 +109,30 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 						msgChan <- fullMsg
 						break
 					}
-					print("e")
+					if *debug {
+						print("e")
+					}
 					time.Sleep(time.Duration(fib.next()) * time.Second)
 				}
 			}(msg.Id)
-			fmt.Print(".")
+			if *debug {
+				fmt.Print(".")
+			}
 		}
 
 		pageToken = r.NextPageToken
 		if pageToken == "" {
 			break
 		}
-		fmt.Print(".")
+		if *debug {
+			fmt.Print(".")
+		}
 	}
 
-	fmt.Println("")
-	print("All messages have been retrieved.\n")
+	if *debug {
+		fmt.Println("")
+		print("All messages have been retrieved.\n")
+	}
 	wg.Done()
 
 	// Collect results, taking no more than 60 seconds
