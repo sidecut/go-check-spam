@@ -74,9 +74,16 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 		if pageToken != "" {
 			req = req.PageToken(pageToken)
 		}
-		r, err := req.Do()
-		if err != nil {
-			return nil, fmt.Errorf("unable to retrieve messages: %v", err)
+		var r *gmail.ListMessagesResponse
+		fib := NewFib()
+		for {
+			var err error
+			r, err = req.Do()
+			if err == nil {
+				break
+			}
+			print("r")
+			time.Sleep(time.Duration(fib.next()) * time.Second)
 		}
 
 		// Process messages in parallel
