@@ -142,8 +142,6 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 			go func(messageId string) {
 				defer wg.Done()
 				defer func() { <-semaphore }() // Release the semaphore slot
-				// sleep for 1 second to avoid rate limiting
-				time.Sleep(1 * time.Second)
 				fullMsg, err := srv.Users.Messages.Get("me", messageId).Format("minimal").Do()
 				if err != nil {
 					errChan <- fmt.Errorf("unable to retrieve message details: %v", err)
