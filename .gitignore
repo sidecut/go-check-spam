@@ -1,2 +1,6 @@
 credentials.json
 token.json
+
+# Executable file
+gocheckspam
+gocheckspam.exe
