@@ -134,14 +134,10 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 		}
 
 		// Process messages in parallel
-		semaphore := make(chan struct{}, 10) // Limit to 10 concurrent requests
-
 		for _, msg := range r.Messages {
 			wg.Add(1)
-			semaphore <- struct{}{} // Acquire a semaphore slot
 			go func(messageId string) {
 				defer wg.Done()
-				defer func() { <-semaphore }() // Release the semaphore slot
 				fullMsg, err := srv.Users.Messages.Get("me", messageId).Format("minimal").Do()
 				if err != nil {
 					errChan <- fmt.Errorf("unable to retrieve message details: %v", err)
