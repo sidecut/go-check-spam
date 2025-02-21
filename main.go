@@ -159,6 +159,7 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 
 	fmt.Println("")
 	print("All messages have been retrieved.\n")
+	wg.Done()
 
 	// Collect results
 	for msg := range msgChan {
