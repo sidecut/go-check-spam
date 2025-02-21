@@ -190,7 +190,7 @@ func main() {
 			continue
 		}
 		dayOfWeek := dateValue.Format("Mon")
-		fmt.Printf("%s, %s: %d\n", dayOfWeek, date, count)
+		fmt.Printf("%s %s: %d\n", dayOfWeek, date, count)
 	}
 	fmt.Printf("Total: %d\n", total)
 }
