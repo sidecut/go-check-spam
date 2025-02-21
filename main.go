@@ -84,6 +84,7 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 			wg.Add(1)
 			go func(messageId string) {
 				defer wg.Done()
+				fib := NewFib()
 				for {
 					fullMsg, err := srv.Users.Messages.Get("me", messageId).Format("minimal").Do()
 					if err == nil {
@@ -91,7 +92,7 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 						break
 					}
 					print("e")
-					time.Sleep(1 * time.Second)
+					time.Sleep(time.Duration(fib.next()) * time.Second)
 				}
 			}(msg.Id)
 			fmt.Print(".")
