@@ -60,9 +60,11 @@ func getSpamCounts(srv *gmail.Service) (map[string]int, error) {
 func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 	var messages []*gmail.Message
 	pageToken := ""
+	batchSize := 500 // Define the batch size
+	days := 31       // Define how many days back to look
 
 	// Create a channel to receive messages
-	msgChan := make(chan *gmail.Message)
+	msgChan := make(chan *gmail.Message, batchSize) // Buffer the channel
 	// Create a channel to receive errors
 	errChan := make(chan error)
 	// Create a WaitGroup to track goroutines
@@ -79,12 +81,17 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 		}
 	}()
 
+	// Calculate the date 'days' ago
+	cutoff := time.Now().AddDate(0, 0, -days).Format("2006/01/02")
+	query := "after:" + cutoff // Gmail query to filter messages
 	total := 0
+
 	for {
-		req := srv.Users.Messages.List("me").LabelIds("SPAM")
+		req := srv.Users.Messages.List("me").LabelIds("SPAM").Q(query)
 		if pageToken != "" {
 			req = req.PageToken(pageToken)
 		}
+		req.MaxResults(int64(batchSize)) // Set the batch size
 		var r *gmail.ListMessagesResponse
 		fib := NewFib()
 		for {
