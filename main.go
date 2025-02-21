@@ -121,6 +121,7 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 		wg.Wait()
 		close(msgChan)
 		close(errChan)
+		print("All workers are done. Closing channels.\n")
 	}()
 
 	for {
@@ -157,6 +158,7 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 	}
 
 	fmt.Println("")
+	print("All messages have been retrieved.\n")
 
 	// Collect results
 	for msg := range msgChan {
