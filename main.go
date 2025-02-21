@@ -106,10 +106,9 @@ func getSpamCounts(srv *gmail.Service) (map[string]int, error) {
 func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 	var messages []*gmail.Message
 	pageToken := ""
-	batchSize := 500 // Define the batch size
 
 	// Create a channel to receive messages
-	msgChan := make(chan *gmail.Message, batchSize) // Buffer the channel
+	msgChan := make(chan *gmail.Message)
 	// Create a channel to receive errors
 	errChan := make(chan error)
 	// Create a WaitGroup to track goroutines
@@ -129,7 +128,6 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 		if pageToken != "" {
 			req = req.PageToken(pageToken)
 		}
-		req.MaxResults(int64(batchSize)) // Set the batch size
 		r, err := req.Do()
 		if err != nil {
 			return nil, fmt.Errorf("unable to retrieve messages: %v", err)
