@@ -161,9 +161,30 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 	print("All messages have been retrieved.\n")
 	wg.Done()
 
-	// Collect results
-	for msg := range msgChan {
-		messages = append(messages, msg)
+	// Collect results, taking no more than 60 seconds
+	// This is to prevent the program from hanging indefinitely
+	timeout := time.After(60 * time.Second)
+	for {
+		select {
+		case msg, ok := <-msgChan:
+			if !ok {
+				msgChan = nil
+			} else {
+				messages = append(messages, msg)
+			}
+		case err, ok := <-errChan:
+			if !ok {
+				errChan = nil
+			} else {
+				return nil, err
+			}
+		case <-timeout:
+			return nil, fmt.Errorf("timed out waiting for messages")
+		}
+
+		if msgChan == nil && errChan == nil {
+			break
+		}
 	}
 
 	// Check for any errors
