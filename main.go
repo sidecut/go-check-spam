@@ -79,6 +79,7 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 		}
 	}()
 
+	total := 0
 	for {
 		req := srv.Users.Messages.List("me").LabelIds("SPAM")
 		if pageToken != "" {
@@ -116,9 +117,8 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 					time.Sleep(time.Duration(fib.next()) * time.Second)
 				}
 			}(msg.Id)
-			if *debug {
-				fmt.Print(".")
-			}
+			total++
+			fmt.Printf("\r%d", total)
 		}
 
 		pageToken = r.NextPageToken
@@ -130,8 +130,8 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 		}
 	}
 
+	fmt.Println()
 	if *debug {
-		fmt.Println("")
 		print("All messages have been retrieved.\n")
 	}
 	wg.Done()
