@@ -17,7 +17,7 @@ import (
 
 var debug = flag.Bool("debug", false, "output debug information")
 var timeout = flag.Int("timeout", 60, "timeout in seconds")
-var days = flag.Float64("days", 31, "number of days to look back")
+var days = flag.Int("days", 31, "number of days to look back")
 
 func init() {
 	flag.Parse()
@@ -50,7 +50,7 @@ func getSpamCounts(srv *gmail.Service) (map[string]int, error) {
 
 		// Check if the email is within the past 31 days
 		daysAgo := today.Sub(emailTime).Hours() / 24
-		if daysAgo <= *days {
+		if daysAgo <= float64(*days) {
 			dailyCounts[emailDate]++
 		}
 	}
@@ -82,7 +82,7 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 	}()
 
 	// Calculate the date 'days' ago
-	cutoff := time.Now().AddDate(0, 0, -days).Format("2006/01/02")
+	cutoff := time.Now().AddDate(0, 0, -*days).Format("2006/01/02")
 	query := "after:" + cutoff // Gmail query to filter messages
 	total := 0
 
