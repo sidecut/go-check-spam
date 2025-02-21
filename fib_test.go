@@ -1,6 +1,7 @@
 package main
 
 import "testing"
+import "math"
 
 func TestFibonacci(t *testing.T) {
 	fib := NewFib()
@@ -16,7 +17,7 @@ func TestFibonacci(t *testing.T) {
 
 func TestFibonacciOverflow(t *testing.T) {
 	fib := &Fib{
-		value1: 2147483647, // Max int32 value
+		value1: math.MaxInt, // Max int32 value
 		value2: 1,
 	}
 
