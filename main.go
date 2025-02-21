@@ -114,6 +114,14 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 	// Create a WaitGroup to track goroutines
 	var wg sync.WaitGroup
 
+	// Start a goroutine to close channels when all workers are done
+	wg.Add(1)
+	go func() {
+		wg.Wait()
+		close(msgChan)
+		close(errChan)
+	}()
+
 	for {
 		req := srv.Users.Messages.List("me").LabelIds("SPAM")
 		if pageToken != "" {
@@ -139,32 +147,27 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 			fmt.Print(".")
 		}
 
-		// Start a goroutine to close channels when all workers are done
-		go func() {
-			wg.Wait()
-			close(msgChan)
-			close(errChan)
-		}()
-
-		// Collect results
-		for msg := range msgChan {
-			messages = append(messages, msg)
-		}
-
-		// Check for any errors
-		for err := range errChan {
-			if err != nil {
-				return nil, err
-			}
-		}
-
 		pageToken = r.NextPageToken
 		if pageToken == "" {
 			break
 		}
 		fmt.Print(".")
 	}
+
 	fmt.Println("")
+
+	// Collect results
+	for msg := range msgChan {
+		messages = append(messages, msg)
+	}
+
+	// Check for any errors
+	for err := range errChan {
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return messages, nil
 }
 
