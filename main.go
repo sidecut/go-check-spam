@@ -17,6 +17,7 @@ import (
 
 var debug = flag.Bool("debug", false, "output debug information")
 var timeout = flag.Int("timeout", 60, "timeout in seconds")
+var days = 31 // Define how many days back to look
 
 func init() {
 	flag.Parse()
@@ -49,7 +50,7 @@ func getSpamCounts(srv *gmail.Service) (map[string]int, error) {
 
 		// Check if the email is within the past 31 days
 		daysAgo := today.Sub(emailTime).Hours() / 24
-		if daysAgo <= 31 {
+		if daysAgo <= float64(days) {
 			dailyCounts[emailDate]++
 		}
 	}
@@ -61,7 +62,6 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 	var messages []*gmail.Message
 	pageToken := ""
 	batchSize := 500 // Define the batch size
-	days := 31       // Define how many days back to look
 
 	// Create a channel to receive messages
 	msgChan := make(chan *gmail.Message, batchSize) // Buffer the channel
