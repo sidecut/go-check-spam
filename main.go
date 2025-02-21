@@ -15,7 +15,6 @@ import (
 	"google.golang.org/api/option"
 )
 
-var debug = flag.Bool("debug", false, "output debug information")
 var timeout = flag.Int("timeout", 60, "timeout in seconds")
 var days = flag.Int("days", 31, "number of days to look back")
 
@@ -71,9 +70,6 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 		wg.Wait()
 		close(msgChan)
 		close(errChan)
-		if *debug {
-			print("All workers are done. Closing channels.\n")
-		}
 	}()
 
 	// Calculate the date 'days' ago
@@ -95,9 +91,6 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 			if err == nil {
 				break
 			}
-			if *debug {
-				print("r")
-			}
 			time.Sleep(time.Duration(fib.next()) * time.Second)
 		}
 
@@ -113,9 +106,6 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 						msgChan <- fullMsg
 						break
 					}
-					if *debug {
-						print("e")
-					}
 					time.Sleep(time.Duration(fib.next()) * time.Second)
 				}
 			}(msg.Id)
@@ -127,15 +117,9 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 		if pageToken == "" {
 			break
 		}
-		if *debug {
-			fmt.Print(".")
-		}
 	}
 
 	fmt.Print("\r") // erase the in progress count
-	if *debug {
-		print("All messages have been retrieved.\n")
-	}
 	wg.Done()
 
 	// Collect results, taking no more than 60 seconds
