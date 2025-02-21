@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sort"
 	"sync"
 	"time"
 
@@ -216,7 +217,16 @@ func main() {
 	}
 
 	fmt.Println("Spam email counts for the past 31 days (based on internalDate):")
-	for date, count := range spamCounts {
+	var dates []string
+	for date := range spamCounts {
+		dates = append(dates, date)
+	}
+	sort.Strings(dates)
+
+	total := 0
+	for _, date := range dates {
+		count := spamCounts[date]
+		total += count
 		fmt.Printf("%s: %d\n", date, count)
 	}
 }
