@@ -132,7 +132,7 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 		}
 	}
 
-	fmt.Println()
+	fmt.Print("\r") // erase the in progress count
 	if *debug {
 		print("All messages have been retrieved.\n")
 	}
