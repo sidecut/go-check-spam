@@ -138,12 +138,15 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 			wg.Add(1)
 			go func(messageId string) {
 				defer wg.Done()
+				for {
 				fullMsg, err := srv.Users.Messages.Get("me", messageId).Format("minimal").Do()
-				if err != nil {
-					errChan <- fmt.Errorf("unable to retrieve message details: %v", err)
-					return
+					if err == nil {
+						msgChan <- fullMsg
+						break
+					}
+					print("e")
+					time.Sleep(1 * time.Second)
 				}
-				msgChan <- fullMsg
 			}(msg.Id)
 			fmt.Print(".")
 		}
@@ -182,13 +185,6 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 
 		if msgChan == nil && errChan == nil {
 			break
-		}
-	}
-
-	// Check for any errors
-	for err := range errChan {
-		if err != nil {
-			return nil, err
 		}
 	}
 
