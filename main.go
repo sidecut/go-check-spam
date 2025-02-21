@@ -140,7 +140,7 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 			go func(messageId string) {
 				defer wg.Done()
 				for {
-				fullMsg, err := srv.Users.Messages.Get("me", messageId).Format("minimal").Do()
+					fullMsg, err := srv.Users.Messages.Get("me", messageId).Format("minimal").Do()
 					if err == nil {
 						msgChan <- fullMsg
 						break
@@ -229,4 +229,5 @@ func main() {
 		total += count
 		fmt.Printf("%s: %d\n", date, count)
 	}
+	fmt.Printf("Total: %d\n", total)
 }
