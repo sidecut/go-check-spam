@@ -16,6 +16,7 @@ import (
 )
 
 var debug = flag.Bool("debug", false, "output debug information")
+var timeout = flag.Int("timeout", 60, "timeout in seconds")
 
 func init() {
 	flag.Parse()
@@ -137,7 +138,7 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 
 	// Collect results, taking no more than 60 seconds
 	// This is to prevent the program from hanging indefinitely
-	timeout := time.After(60 * time.Second)
+	timeout := time.After(time.Duration(*timeout) * time.Second)
 	for {
 		select {
 		case msg, ok := <-msgChan:
