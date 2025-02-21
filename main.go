@@ -24,7 +24,6 @@ func init() {
 }
 
 func getSpamCounts(srv *gmail.Service) (map[string]int, error) {
-	today := time.Now()
 	dailyCounts := make(map[string]int)
 
 	// Get all messages in the SPAM folder
@@ -48,11 +47,7 @@ func getSpamCounts(srv *gmail.Service) (map[string]int, error) {
 		emailTime := time.Unix(internalDateSec, 0)
 		emailDate := emailTime.Format("2006-01-02") // Format as YYYY-MM-DD
 
-		// Check if the email is within the past 31 days
-		daysAgo := today.Sub(emailTime).Hours() / 24
-		if daysAgo <= float64(*days) {
-			dailyCounts[emailDate]++
-		}
+		dailyCounts[emailDate]++
 	}
 
 	return dailyCounts, nil
