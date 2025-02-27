@@ -28,6 +28,14 @@ func getTokenFromWeb(config *oauth2.Config) *oauth2.Token {
 	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
 	fmt.Printf("Go to the following link in your browser then type the "+
 		"authorization code: \n%v\n", authURL)
+	// Start a web server to handle the callback and exchange the code.
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Printf("Received authorization code: %s\n", r.URL.Query().Get("code"))
+		fmt.Fprintf(w, "Authorization received. You can close this window.")
+	})
+	go http.ListenAndServe(":80", nil)
+	// Wait for the user to enter the authorization code.
+	fmt.Print("Enter authorization code: ")
 
 	var authCode string
 	if _, err := fmt.Scan(&authCode); err != nil {
