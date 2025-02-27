@@ -31,7 +31,7 @@ func getTokenFromWeb(config *oauth2.Config) *oauth2.Token {
 
 	var authCode string
 	if _, err := fmt.Scan(&authCode); err != nil {
-		log.Fatalf("Unable to read authorization code: %v", err)
+		log.Fatalf("Unable to scan authorization code: %v", err)
 	}
 
 	tok, err := config.Exchange(context.TODO(), authCode)
