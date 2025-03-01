@@ -7,8 +7,11 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
+	"runtime"
 	"time"
 
+	// "golang.org/x/net/context"
 	"golang.org/x/oauth2"
 )
 
@@ -28,18 +31,61 @@ func getTokenFromWeb(config *oauth2.Config) *oauth2.Token {
 	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
 	fmt.Printf("Go to the following link in your browser then type the "+
 		"authorization code: \n%v\n", authURL)
-	// Start a web server to handle the callback and exchange the code.
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Printf("Received authorization code: %s\n", r.URL.Query().Get("code"))
-		fmt.Fprintf(w, "Authorization received. You can close this window.")
-	})
-	go http.ListenAndServe(":80", nil)
-	// Wait for the user to enter the authorization code.
-	fmt.Print("Enter authorization code: ")
+
+	var authCodeChan = make(chan string)
+
+	srv := &http.Server{Addr: ":80"}
+	go func() {
+		// Start a web server to handle the callback and exchange the code.
+		http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			// We get several requests to the root URL, so we need to filter out the favicon request.
+			if r.URL.Path != "/" {
+				http.NotFound(w, r)
+				return
+			}
+			authCode := r.URL.Query().Get("code")
+			fmt.Println("") // Print a newline because there's a dangling "Enter authorization code: " in the terminal
+			fmt.Printf("Received authorization code: %s\n", authCode)
+			fmt.Fprintf(w, "Authorization received. You can close this window.")
+			// Send the auth code to the channel
+			authCodeChan <- authCode
+
+			// Shutdown the server
+			// srv.Shutdown(context.Background())}
+		})
+
+		if err := srv.ListenAndServe(); err != http.ErrServerClosed {
+			log.Fatalf("Unable to start HTTP server: %v", err)
+		}
+	}()
+
+	go func() {
+		// Wait for the user to enter the authorization code.
+		fmt.Print("Enter authorization code: ")
+
+		var authCode string
+		if _, err := fmt.Scan(&authCode); err != nil {
+			log.Fatalf("Unable to scan authorization code: %v", err)
+		}
+		authCodeChan <- authCode
+	}()
+
+	// Open the URL in the user's browser.
+	err := openBrowser(authURL)
+	if err != nil {
+		log.Printf("Error opening browser: %v", err)
+		log.Println("Please manually open the URL in your browser.")
+	}
+
+	// Wait for the authorization code to be received from either the terminal *or* the web server.
+	// This is done to handle the case where the user manually enters the code in the terminal.
+	// This select statement will block until one of the two cases occurs.
 
 	var authCode string
-	if _, err := fmt.Scan(&authCode); err != nil {
-		log.Fatalf("Unable to scan authorization code: %v", err)
+	select {
+	case <-time.After(60 * time.Second):
+		log.Fatal("Timed out waiting for authorization code.")
+	case authCode = <-authCodeChan:
 	}
 
 	tok, err := config.Exchange(context.TODO(), authCode)
@@ -76,4 +122,26 @@ func saveToken(path string, token *oauth2.Token) {
 	}
 	defer f.Close()
 	json.NewEncoder(f).Encode(token)
+}
+
+// openBrowser tries to open the URL in a browser, preferring the OS's default browser.
+func openBrowser(url string) error {
+	var cmd string
+	var args []string
+
+	switch runtime.GOOS {
+	case "windows":
+		cmd = "cmd"
+		args = []string{"/c", "start", url}
+	case "darwin":
+		cmd = "open"
+		args = []string{url}
+	case "linux":
+		cmd = "xdg-open"
+		args = []string{url}
+	default:
+		return fmt.Errorf("unsupported platform")
+	}
+
+	return exec.Command(cmd, args...).Start()
 }
