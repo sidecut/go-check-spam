@@ -92,6 +92,8 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 			time.Sleep(time.Duration(fib.next()) * time.Second)
 		}
 
+		date1971 := time.Date(1971, 1, 1, 0, 0, 0, 0, time.UTC)
+
 		// Process messages in parallel
 		for _, msg := range r.Messages {
 			wg.Add(1)
@@ -101,6 +103,31 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 				for {
 					fullMsg, err := srv.Users.Messages.Get("me", messageId).Format("minimal").Do()
 					if err == nil {
+
+						if fullMsg.InternalDate < date1971.Unix()*1000 {
+							// Retrieve the entire message and display it
+							fullMessage, err := getMessage(srv, fullMsg.Id)
+
+							if err != nil {
+								fmt.Printf("Error retrieving message: %v\n", err)
+								continue
+							}
+
+							// Print the message
+							// fmt.Printf("Message ID: %s\n", fullMessage.Id)
+							fmt.Printf("Message: %v\n", fullMessage)
+							// fmt.Printf("Message Body: %v\n", fullMessage.Payload.Body)
+							fmt.Printf("Snippet: %s\n", fullMessage.Snippet)
+							fmt.Printf("Payload: %s\n", fullMessage.Payload)
+							// fmt.Printf("From: %s\n", fullMessage.Payload.Headers[1].Value)
+							// fmt.Printf("To: %s\n", fullMessage.Payload.Headers[2].Value)
+							// fmt.Printf("Date: %s\n", fullMessage.Payload.Headers[3].Value)
+							// fmt.Printf("Internal Date: %d\n", m.InternalDate)
+							// fmt.Printf("Internal Date (converted): %s\n", emailTime)
+							// fmt.Printf("Internal Date (converted, formatted): %s\n", emailDate)
+							// fmt.Println("")
+						}
+
 						msgChan <- fullMsg
 						break
 					}
@@ -193,4 +220,11 @@ func main() {
 		fmt.Printf("%s %s: %d\n", dayOfWeek, date, count)
 	}
 	fmt.Printf("Total: %d\n", total)
+}
+func getMessage(srv *gmail.Service, messageId string) (*gmail.Message, error) {
+	msg, err := srv.Users.Messages.Get("me", messageId).Do()
+	if err != nil {
+		return nil, fmt.Errorf("unable to retrieve message %s: %v", messageId, err)
+	}
+	return msg, nil
 }
