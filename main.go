@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -115,17 +116,15 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 
 							// Print the message
 							// fmt.Printf("Message ID: %s\n", fullMessage.Id)
-							fmt.Printf("Message: %v\n", fullMessage)
+							// fmt.Printf("Message: %v\n", fullMessage)
 							// fmt.Printf("Message Body: %v\n", fullMessage.Payload.Body)
 							fmt.Printf("Snippet: %s\n", fullMessage.Snippet)
-							fmt.Printf("Payload: %s\n", fullMessage.Payload)
-							// fmt.Printf("From: %s\n", fullMessage.Payload.Headers[1].Value)
-							// fmt.Printf("To: %s\n", fullMessage.Payload.Headers[2].Value)
-							// fmt.Printf("Date: %s\n", fullMessage.Payload.Headers[3].Value)
-							// fmt.Printf("Internal Date: %d\n", m.InternalDate)
-							// fmt.Printf("Internal Date (converted): %s\n", emailTime)
-							// fmt.Printf("Internal Date (converted, formatted): %s\n", emailDate)
-							// fmt.Println("")
+							// marshall the payloadJson to json
+							if payloadJson, err := json.Marshal(fullMessage.Payload); err != nil {
+								fmt.Printf("Error marshalling payload: %v\n", err)
+							} else {
+								fmt.Printf("Payload: %s\n", payloadJson)
+							}
 						}
 
 						msgChan <- fullMsg
