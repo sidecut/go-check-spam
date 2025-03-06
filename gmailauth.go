@@ -11,19 +11,29 @@ import (
 	"runtime"
 	"time"
 
-	// "golang.org/x/net/context"
 	"golang.org/x/oauth2"
 )
 
-// Retrieve a token, saves the token, then returns the generated client.
 func getClient(config *oauth2.Config) *http.Client {
+	// Retrieve a token, saves the token, then returns the generated client.
+	// Changed to return a TokenSource instead of a http.Client
+	ts := getTokenSource(config)
+	return oauth2.NewClient(context.Background(), ts)
+}
+
+// Retrieve a token, saves the token, then returns the generated client.
+// Changed to return a TokenSource instead of a http.Client
+func getTokenSource(config *oauth2.Config) oauth2.TokenSource {
 	tokFile := "token.json"
 	tok, err := tokenFromFile(tokFile)
 	if err != nil {
 		tok = getTokenFromWeb(config)
 		saveToken(tokFile, tok)
 	}
-	return config.Client(context.Background(), tok)
+
+	// Create a new TokenSource that can refresh the token
+	ts := config.TokenSource(context.Background(), tok)
+	return ts
 }
 
 // Request a token from the web, then returns the retrieved token.
@@ -107,9 +117,10 @@ func tokenFromFile(file string) (*oauth2.Token, error) {
 	if err != nil {
 		return nil, err
 	}
-	if tok.Expiry.Before(time.Now()) {
-		return nil, fmt.Errorf("token is expired")
-	}
+	// Remove this check, as expired refresh tokens are ok.
+	// if tok.Expiry.Before(time.Now()) {
+	// 	return nil, fmt.Errorf("token is expired")
+	// }
 	return tok, err
 }
 
