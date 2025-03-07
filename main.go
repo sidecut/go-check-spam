@@ -74,6 +74,7 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 	// Calculate the date 'days' ago
 	cutoff := time.Now().AddDate(0, 0, -*days).Format("2006/01/02")
 	query := "after:" + cutoff // Gmail query to filter messages
+	fmt.Printf("Gmail query: %s\n", query)
 	total := 0
 
 	for {
