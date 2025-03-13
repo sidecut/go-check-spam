@@ -17,6 +17,7 @@ import (
 
 var timeout = flag.Int("timeout", 60, "timeout in seconds")
 var days = flag.Int("days", 30, "number of days to look back")
+var debug = flag.Bool("debug", false, "enable debug output")
 
 func init() {
 	flag.Parse()
@@ -90,6 +91,12 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 			if err == nil {
 				break
 			}
+			// TODO: check for this error:
+			// Error fetching messages: Get "https://*snip*": oauth2: "invalid_grant" "Token has been expired or revoked."
+			if *debug {
+				fmt.Printf("Error fetching messages: %v\n", err)
+			}
+
 			time.Sleep(time.Duration(fib.next()) * time.Second)
 		}
 
@@ -105,6 +112,10 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 						msgChan <- fullMsg
 						break
 					}
+					if *debug {
+						fmt.Printf("Error fetching message %s: %v\n", messageId, err)
+					}
+
 					time.Sleep(time.Duration(fib.next()) * time.Second)
 				}
 			}(msg.Id)
