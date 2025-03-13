@@ -16,7 +16,7 @@ import (
 )
 
 var timeout = flag.Int("timeout", 60, "timeout in seconds")
-var days = flag.Int("days", 31, "number of days to look back")
+var days = flag.Int("days", 30, "number of days to look back")
 
 func init() {
 	flag.Parse()
