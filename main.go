@@ -97,7 +97,7 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 				fmt.Printf("Error fetching messages: %v\n", err)
 			}
 
-			time.Sleep(time.Duration(fib.next()) * 100 * time.Millisecond)
+			time.Sleep(time.Duration(fib.next()) * 250 * time.Millisecond)
 		}
 
 		// Process messages in parallel
@@ -116,7 +116,7 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 						fmt.Printf("Error fetching message %s: %v\n", messageId, err)
 					}
 
-					time.Sleep(time.Duration(fib.next()) * 100 * time.Millisecond)
+					time.Sleep(time.Duration(fib.next()) * 250 * time.Millisecond)
 				}
 			}(msg.Id)
 			total++
