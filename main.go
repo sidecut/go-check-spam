@@ -102,18 +102,23 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 			wg.Add(1)
 			go func(messageId string) {
 				defer wg.Done()
-				fib := NewFib()
-				for {
-					fullMsg, err := srv.Users.Messages.Get("me", messageId).Format("minimal").Do()
-					if err == nil {
-						msgChan <- fullMsg
-						break
-					}
-					if *debug {
-						fmt.Printf("Error fetching message %s: %v\n", messageId, err)
-					}
 
-					time.Sleep(time.Duration(fib.next()) * 250 * time.Millisecond)
+				// fib := NewFib()
+				// for {
+				fullMsg, err := backoff.RetryNotifyWithData(func() (*gmail.Message, error) {
+					// Fetch the full message using exponential backoff
+					return srv.Users.Messages.Get("me", messageId).Format("minimal").Do()
+				}, backoff.NewExponentialBackOff(), func(err error, wait time.Duration) {
+					// Notify on error with the wait duration
+					if *debug {
+						fmt.Printf("Retrying after %v due to error: %v\n", wait, err)
+					}
+				})
+				if err == nil {
+					msgChan <- fullMsg
+				}
+				if *debug {
+					fmt.Printf("Error fetching message %s: %v\n", messageId, err)
 				}
 			}(msg.Id)
 			total++
