@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/gmail/v1"
 	"google.golang.org/api/option"
@@ -18,7 +19,6 @@ import (
 var timeout = flag.Int("timeout", 60, "timeout in seconds")
 var days = flag.Int("days", 30, "number of days to look back")
 var debug = flag.Bool("debug", false, "enable debug output")
-var waitTime = flag.Int("wait", 250, "wait time in milliseconds for error backoff")
 
 func init() {
 	flag.Parse()
@@ -60,8 +60,6 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 
 	// Create a channel to receive messages
 	msgChan := make(chan *gmail.Message)
-	// Create a channel to receive errors
-	errChan := make(chan error)
 	// Create a WaitGroup to track goroutines
 	var wg sync.WaitGroup
 
@@ -70,7 +68,6 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 	go func() {
 		wg.Wait()
 		close(msgChan)
-		close(errChan)
 	}()
 
 	// Calculate the date 'days' ago
@@ -84,21 +81,20 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 		if pageToken != "" {
 			req = req.PageToken(pageToken)
 		}
-		var r *gmail.ListMessagesResponse
-		fib := NewFib()
-		for {
-			var err error
-			r, err = req.Do()
-			if err == nil {
-				break
-			}
-			// TODO: check for this error:
-			// Error fetching messages: Get "https://*snip*": oauth2: "invalid_grant" "Token has been expired or revoked."
-			if *debug {
-				fmt.Printf("Error fetching messages: %v\n", err)
-			}
 
-			time.Sleep(time.Duration(fib.next()) * time.Duration(*waitTime) * time.Millisecond)
+		r, err := backoff.RetryNotifyWithData(func() (*gmail.ListMessagesResponse, error) {
+			// Use exponential backoff to handle rate limiting and transient errors
+			r, err := req.Do()
+			return r, err
+		}, backoff.NewExponentialBackOff(), func(err error, wait time.Duration) {
+			// Notify on error with the wait duration
+			if *debug {
+				fmt.Printf("Retrying after %v due to error: %v\n", wait, err)
+			}
+		})
+		// Check for errors from the backoff retry
+		if err != nil {
+			return nil, fmt.Errorf("error fetching messages: %v", err)
 		}
 
 		// Process messages in parallel
@@ -106,18 +102,22 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 			wg.Add(1)
 			go func(messageId string) {
 				defer wg.Done()
-				fib := NewFib()
-				for {
-					fullMsg, err := srv.Users.Messages.Get("me", messageId).Format("minimal").Do()
-					if err == nil {
-						msgChan <- fullMsg
-						break
-					}
-					if *debug {
-						fmt.Printf("Error fetching message %s: %v\n", messageId, err)
-					}
 
-					time.Sleep(time.Duration(fib.next()) * time.Duration(*waitTime) * time.Millisecond)
+				// fib := NewFib()
+				// for {
+				fullMsg, err := backoff.RetryNotifyWithData(func() (*gmail.Message, error) {
+					// Fetch the full message using exponential backoff
+					return srv.Users.Messages.Get("me", messageId).Format("minimal").Do()
+				}, backoff.NewExponentialBackOff(), func(err error, wait time.Duration) {
+					// Notify on error with the wait duration
+					if *debug {
+						fmt.Printf("Retrying message %s after %v due to error: %v\n", messageId, wait, err)
+					}
+				})
+				if err == nil {
+					msgChan <- fullMsg
+				} else if *debug {
+					fmt.Printf("Error fetching message %s: %v\n", messageId, err)
 				}
 			}(msg.Id)
 			total++
@@ -144,17 +144,11 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 			} else {
 				messages = append(messages, msg)
 			}
-		case err, ok := <-errChan:
-			if !ok {
-				errChan = nil
-			} else {
-				return nil, err
-			}
 		case <-timeout:
 			return nil, fmt.Errorf("timed out waiting for messages")
 		}
 
-		if msgChan == nil && errChan == nil {
+		if msgChan == nil {
 			break
 		}
 	}
@@ -163,10 +157,6 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 }
 
 func main() {
-	if *waitTime < 1 {
-		log.Fatalf("wait time must be at least 1 ms")
-	}
-
 	ctx := context.Background()
 	b, err := os.ReadFile("credentials.json") // Download from Google Cloud Console
 	if err != nil {
