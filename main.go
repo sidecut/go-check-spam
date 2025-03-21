@@ -60,8 +60,6 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 
 	// Create a channel to receive messages
 	msgChan := make(chan *gmail.Message)
-	// Create a channel to receive errors
-	errChan := make(chan error)
 	// Create a WaitGroup to track goroutines
 	var wg sync.WaitGroup
 
@@ -70,7 +68,6 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 	go func() {
 		wg.Wait()
 		close(msgChan)
-		close(errChan)
 	}()
 
 	// Calculate the date 'days' ago
@@ -144,17 +141,11 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 			} else {
 				messages = append(messages, msg)
 			}
-		case err, ok := <-errChan:
-			if !ok {
-				errChan = nil
-			} else {
-				return nil, err
-			}
 		case <-timeout:
 			return nil, fmt.Errorf("timed out waiting for messages")
 		}
 
-		if msgChan == nil && errChan == nil {
+		if msgChan == nil {
 			break
 		}
 	}
