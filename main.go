@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/gmail/v1"
 	"google.golang.org/api/option"
@@ -80,21 +81,20 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 		if pageToken != "" {
 			req = req.PageToken(pageToken)
 		}
-		var r *gmail.ListMessagesResponse
-		fib := NewFib()
-		for {
-			var err error
-			r, err = req.Do()
-			if err == nil {
-				break
-			}
-			// TODO: check for this error:
-			// Error fetching messages: Get "https://*snip*": oauth2: "invalid_grant" "Token has been expired or revoked."
-			if *debug {
-				fmt.Printf("Error fetching messages: %v\n", err)
-			}
 
-			time.Sleep(time.Duration(fib.next()) * 250 * time.Millisecond)
+		r, err := backoff.RetryNotifyWithData(func() (*gmail.ListMessagesResponse, error) {
+			// Use exponential backoff to handle rate limiting and transient errors
+			r, err := req.Do()
+			return r, err
+		}, backoff.NewExponentialBackOff(), func(err error, wait time.Duration) {
+			// Notify on error with the wait duration
+			if *debug {
+				fmt.Printf("Retrying after %v due to error: %v\n", wait, err)
+			}
+		})
+		// Check for errors from the backoff retry
+		if err != nil {
+			return nil, fmt.Errorf("error fetching messages: %v", err)
 		}
 
 		// Process messages in parallel
