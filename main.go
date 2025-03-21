@@ -111,7 +111,7 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 				}, backoff.NewExponentialBackOff(), func(err error, wait time.Duration) {
 					// Notify on error with the wait duration
 					if *debug {
-						fmt.Printf("Retrying after %v due to error: %v\n", wait, err)
+						fmt.Printf("Retrying message %s after %v due to error: %v\n", messageId, wait, err)
 					}
 				})
 				if err == nil {
