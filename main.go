@@ -116,8 +116,7 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 				})
 				if err == nil {
 					msgChan <- fullMsg
-				}
-				if *debug {
+				} else if *debug {
 					fmt.Printf("Error fetching message %s: %v\n", messageId, err)
 				}
 			}(msg.Id)
