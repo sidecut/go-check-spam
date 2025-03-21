@@ -18,6 +18,7 @@ import (
 var timeout = flag.Int("timeout", 60, "timeout in seconds")
 var days = flag.Int("days", 30, "number of days to look back")
 var debug = flag.Bool("debug", false, "enable debug output")
+var waitTime = flag.Int("wait", 250, "wait time in milliseconds for error backoff")
 
 func init() {
 	flag.Parse()
@@ -97,7 +98,7 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 				fmt.Printf("Error fetching messages: %v\n", err)
 			}
 
-			time.Sleep(time.Duration(fib.next()) * 250 * time.Millisecond)
+			time.Sleep(time.Duration(fib.next()) * time.Duration(*waitTime) * time.Millisecond)
 		}
 
 		// Process messages in parallel
@@ -116,7 +117,7 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 						fmt.Printf("Error fetching message %s: %v\n", messageId, err)
 					}
 
-					time.Sleep(time.Duration(fib.next()) * 250 * time.Millisecond)
+					time.Sleep(time.Duration(fib.next()) * time.Duration(*waitTime) * time.Millisecond)
 				}
 			}(msg.Id)
 			total++
@@ -162,6 +163,10 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 }
 
 func main() {
+	if *waitTime < 1 {
+		log.Fatalf("wait time must be at least 1 ms")
+	}
+
 	ctx := context.Background()
 	b, err := os.ReadFile("credentials.json") // Download from Google Cloud Console
 	if err != nil {
