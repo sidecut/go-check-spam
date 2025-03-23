@@ -19,9 +19,11 @@ import (
 var timeout = flag.Int("timeout", 60, "timeout in seconds")
 var days = flag.Int("days", 30, "number of days to look back")
 var debug = flag.Bool("debug", false, "enable debug output")
+var cutoffDate string
 
 func init() {
 	flag.Parse()
+	cutoffDate = time.Now().AddDate(0, 0, -*days).Format("2006-01-02")
 }
 
 func getSpamCounts(srv *gmail.Service) (map[string]int, error) {
@@ -71,8 +73,7 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 	}()
 
 	// Calculate the date 'days' ago
-	cutoff := time.Now().AddDate(0, 0, -*days).Format("2006-01-02")
-	query := "after:" + cutoff // Gmail query to filter messages
+	query := "after:" + cutoffDate // Gmail query to filter messages
 	fmt.Printf("Gmail query: %s\n", query)
 	total := 0
 
@@ -156,6 +157,28 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 	return messages, nil
 }
 
+func printSpamSummary(spamCounts map[string]int) {
+	var dates []string
+	for date := range spamCounts {
+		dates = append(dates, date)
+	}
+	sort.Strings(dates)
+
+	total := 0
+	for _, date := range dates {
+		count := spamCounts[date]
+		total += count
+		dateValue, err := time.Parse("2006-01-02", date)
+		if err != nil {
+			fmt.Printf("Error parsing date: %v\n", err)
+			continue
+		}
+		dayOfWeek := dateValue.Format("Mon")
+		fmt.Printf("%s %s %d\n", dayOfWeek, date, count)
+	}
+	fmt.Printf("Total: %d\n", total)
+}
+
 func main() {
 	ctx := context.Background()
 	b, err := os.ReadFile("credentials.json") // Download from Google Cloud Console
@@ -181,23 +204,5 @@ func main() {
 	}
 
 	fmt.Printf("Spam email counts for the past %v days (based on internalDate):\n", *days)
-	var dates []string
-	for date := range spamCounts {
-		dates = append(dates, date)
-	}
-	sort.Strings(dates)
-
-	total := 0
-	for _, date := range dates {
-		count := spamCounts[date]
-		total += count
-		dateValue, err := time.Parse("2006-01-02", date)
-		if err != nil {
-			fmt.Printf("Error parsing date: %v\n", err)
-			continue
-		}
-		dayOfWeek := dateValue.Format("Mon")
-		fmt.Printf("%s %s %d\n", dayOfWeek, date, count)
-	}
-	fmt.Printf("Total: %d\n", total)
+	printSpamSummary(spamCounts)
 }
