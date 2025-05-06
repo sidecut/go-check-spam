@@ -53,10 +53,17 @@ func getSpamCounts(srv *gmail.Service) (map[string]int, error) {
 			continue
 		}
 
-		// Convert to seconds
-		internalDateSec := internalDateMs / 1000
 		// Create time object
-		emailTime := time.Unix(internalDateSec, 0)
+		emailTime := time.UnixMilli(internalDateMs)
+		if *debug {
+			fmt.Printf("Message ID: %s, InternalDate: %d, Parsed Time: %s\n", m.Id, internalDateMs, emailTime)
+		}
+		// Format the date as YYYY-MM-DD
+		// This is the date we will use for counting
+		// emailTime = emailTime.In(time.Local)
+		if *debug {
+			fmt.Printf("Message ID: %s, InternalDate: %d, Parsed Time: %s\n", m.Id, internalDateMs, emailTime)
+		}
 		emailDate := emailTime.Format("2006-01-02") // Format as YYYY-MM-DD
 
 		dailyCounts[emailDate]++
