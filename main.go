@@ -44,6 +44,15 @@ func getSpamCounts(srv *gmail.Service) (map[string]int, error) {
 	for _, m := range messages {
 		// internalDate is returned as milliseconds since epoch
 		internalDateMs := m.InternalDate
+
+		// Safety check for invalid dates
+		if internalDateMs <= 0 {
+			if *debug {
+				fmt.Printf("Warning: Invalid internalDate (%d) for message ID %s\n", internalDateMs, m.Id)
+			}
+			continue
+		}
+
 		// Convert to seconds
 		internalDateSec := internalDateMs / 1000
 		// Create time object
