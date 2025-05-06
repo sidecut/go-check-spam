@@ -45,6 +45,14 @@ func getSpamCounts(srv *gmail.Service) (map[string]int, error) {
 		// internalDate is returned as milliseconds since epoch (assumed to be UTC/GMT)
 		internalDateMs := m.InternalDate
 
+		// Safety check for invalid dates
+		if internalDateMs <= 0 {
+			if *debug {
+				fmt.Printf("Warning: Invalid internalDate (%d) for message ID %s\n", internalDateMs, m.Id)
+			}
+			continue
+		}
+
 		// Create a time.Time object from the UTC epoch milliseconds.
 		// time.UnixMilli converts the UTC epoch milliseconds to a time.Time object
 		// representing that instant in the local system timezone.
