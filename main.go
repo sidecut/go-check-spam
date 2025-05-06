@@ -42,13 +42,16 @@ func getSpamCounts(srv *gmail.Service) (map[string]int, error) {
 
 	// Process each message to extract internalDate
 	for _, m := range messages {
-		// internalDate is returned as milliseconds since epoch
+		// internalDate is returned as milliseconds since epoch (assumed to be UTC/GMT)
 		internalDateMs := m.InternalDate
-		// Convert to seconds
-		internalDateSec := internalDateMs / 1000
-		// Create time object
-		emailTime := time.Unix(internalDateSec, 0)
-		emailDate := emailTime.Format("2006-01-02") // Format as YYYY-MM-DD
+
+		// Create a time.Time object from the UTC epoch milliseconds.
+		// time.UnixMilli converts the UTC epoch milliseconds to a time.Time object
+		// representing that instant in the local system timezone.
+		emailTimeLocal := time.UnixMilli(internalDateMs)
+
+		// Format the local time to get the local date string in YYYY-MM-DD format
+		emailDate := emailTimeLocal.Format("2006-01-02")
 
 		dailyCounts[emailDate]++
 	}
