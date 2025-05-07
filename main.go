@@ -59,6 +59,9 @@ func getSpamCounts(srv *gmail.Service) (map[string]int, error) {
 
 		// Format the local time to get the local date string in YYYY-MM-DD format
 		emailDate := emailTimeLocal.Format("2006-01-02")
+		if *debug {
+			fmt.Printf("Message ID: %s, Local Date: %s\n", m.Id, emailDate)
+		}
 
 		dailyCounts[emailDate]++
 	}
