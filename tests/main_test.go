@@ -12,6 +12,29 @@ func TestUTCToLocalConversion(t *testing.T) {
 	// UTC time
 	utcTime := time.Date(2023, 10, 2, 3, 0, 0, 0, time.UTC)
 
+	// Get milliseconds since epoch
+	epochMillis := utcTime.UnixMilli()
+	fmt.Printf("Epoch milliseconds: %d\n", epochMillis)
+	// Convert back to UTC time
+	utcTimeFromMillis := time.UnixMilli(epochMillis)
+	fmt.Printf("UTC Time from milliseconds: %s\n", utcTimeFromMillis)
+	// Check if the conversion is correct
+	if !utcTime.Equal(utcTimeFromMillis) {
+		t.Errorf("expected %s, got %s", utcTime, utcTimeFromMillis)
+	}
+	// Print the UTC time
+	fmt.Println("UTC Time:                                           ", utcTime)
+	// Print the local time
+	fmt.Println("Local Time:                                         ", utcTime.Local())
+	// Print the local time in a specific format
+	fmt.Println("Local Time (formatted):                             ", utcTime.Local().Format("2006-01-02"))
+	// Print the local time in a specific format with UTC offset
+	fmt.Println("Local Time with UTC offset (formatted):             ", utcTime.Local().Format("2006-01-02 15:04:05 -0700"))
+	// Print the local time in a specific format with UTC offset and timezone
+	fmt.Println("Local Time with UTC offset and timezone (formatted):", utcTime.Local().Format("2006-01-02 15:04:05 -0700 MST"))
+	// Print the local time in a specific format with UTC offset and timezone
+	fmt.Println("Local Time with UTC offset and timezone (formatted):", utcTime.Local().Format("2006-01-02 15:04:05 -0700 MST"))
+
 	// Convert to New York local time
 	// Note: The local time zone is determined by the system's time zone settings.
 	// If you want to test with a specific time zone, you can use time.LoadLocation
