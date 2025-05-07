@@ -21,11 +21,6 @@ var days = flag.Int("days", 30, "number of days to look back")
 var debug = flag.Bool("debug", false, "enable debug output")
 var cutoffDate string
 
-func init() {
-	flag.Parse()
-	cutoffDate = time.Now().AddDate(0, 0, -*days).Format("2006-01-02")
-}
-
 func getSpamCounts(srv *gmail.Service) (map[string]int, error) {
 	dailyCounts := make(map[string]int)
 
@@ -211,6 +206,9 @@ func printSpamSummary(spamCounts map[string]int) {
 }
 
 func main() {
+	flag.Parse()
+	cutoffDate = time.Now().AddDate(0, 0, -*days).Format("2006-01-02")
+
 	ctx := context.Background()
 	b, err := os.ReadFile("credentials.json") // Download from Google Cloud Console
 	if err != nil {
