@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -16,13 +17,13 @@ import (
 
 func getClient(config *oauth2.Config) *http.Client {
 	// Retrieve a token, saves the token, then returns the generated client.
-	// Changed to return a TokenSource instead of a http.Client
+	// Changed to return a TokenSource instead of an http.Client
 	ts := getTokenSource(config)
 	return oauth2.NewClient(context.Background(), ts)
 }
 
 // Retrieve a token, saves the token, then returns the generated client.
-// Changed to return a TokenSource instead of a http.Client
+// Changed to return a TokenSource instead of an http.Client
 func getTokenSource(config *oauth2.Config) oauth2.TokenSource {
 	tokFile := "token.json"
 	tok, err := tokenFromFile(tokFile)
@@ -64,7 +65,7 @@ func getTokenFromWeb(config *oauth2.Config) *oauth2.Token {
 			// srv.Shutdown(context.Background())}
 		})
 
-		if err := srv.ListenAndServe(); err != http.ErrServerClosed {
+		if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("Unable to start HTTP server: %v", err)
 		}
 	}()

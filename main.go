@@ -166,9 +166,9 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 type outputStates int
 
 const (
-	FIRST_LINE outputStates = iota
-	BEFORE_DATE
-	ON_OR_AFTER_DATE
+	FirstLine outputStates = iota
+	BeforeDate
+	OnOrAfterDate
 )
 
 func printSpamSummary(spamCounts map[string]int) {
@@ -179,17 +179,17 @@ func printSpamSummary(spamCounts map[string]int) {
 	sort.Strings(dates)
 
 	total := 0
-	outputState := FIRST_LINE
+	outputState := FirstLine
 	for _, date := range dates {
 		if date < cutoffDate {
-			outputState = BEFORE_DATE
+			outputState = BeforeDate
 			// log.Default().Printf("Switching to BEFORE_DATE for date: %s\n", date)
 		} else {
-			if outputState == BEFORE_DATE {
+			if outputState == BeforeDate {
 				// Print a blank line to separate sections
 				fmt.Println()
 			}
-			outputState = ON_OR_AFTER_DATE
+			outputState = OnOrAfterDate
 		}
 
 		count := spamCounts[date]
