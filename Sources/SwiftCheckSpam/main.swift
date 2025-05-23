@@ -1,7 +1,6 @@
 import ArgumentParser
 import Foundation
 
-@main
 struct SwiftCheckSpam: AsyncParsableCommand {
     static var configuration = CommandConfiguration(
         abstract: "Checks Gmail for spam messages and provides a daily count."
@@ -34,7 +33,7 @@ struct SwiftCheckSpam: AsyncParsableCommand {
             return
         }
 
-        var dates = spamCounts.keys.sorted()
+        let dates = spamCounts.keys.sorted()
 
         var total = 0
         var outputState = OutputState.firstLine

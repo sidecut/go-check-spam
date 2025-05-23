@@ -99,7 +99,7 @@ class GmailAuthenticator {
                 return token.accessToken
             } else if let token = currentToken, let refreshToken = token.refreshToken {
                 print("Access token expired, attempting refresh...")
-                return try await refreshToken(refreshToken)
+                return try await self.refreshToken(refreshToken)
             }
         } catch AppError.tokenNotFound {
             // Proceed to get new token
@@ -224,8 +224,9 @@ class GmailAuthenticator {
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
             throw AppError.authenticationFailed(
-                "Token exchange failed: \(httpResponse.statusCode) - \(errorBody)")
+                "Token exchange failed: \(statusCode) - \(errorBody)")
         }
 
         struct TokenExchangeResponse: Codable {

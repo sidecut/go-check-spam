@@ -69,7 +69,7 @@ class GmailService {
                     defer { continuation.finish() }
                     do {
                         repeat {
-                            var components = URLComponents(string: "\(baseURL)/messages")!
+                            var components = URLComponents(string: "\(self.baseURL)/messages")!
                             var queryItems = [
                                 URLQueryItem(name: "labelIds", value: "SPAM"),
                                 URLQueryItem(name: "q", value: query),
@@ -84,8 +84,8 @@ class GmailService {
                                 throw AppError.apiError("Invalid URL for listing messages")
                             }
 
-                            let request = makeRequest(url: url)
-                            let response: GmailListMessagesResponse = try await performRequest(
+                            let request = self.makeRequest(url: url)
+                            let response: GmailListMessagesResponse = try await self.performRequest(
                                 request: request, debug: debug)
 
                             if let messagesMetadata = response.messages {
@@ -103,12 +103,13 @@ class GmailService {
                                     guard
                                         let msgUrl = URL(
                                             string:
-                                                "\(baseURL)/messages/\(metaMsg.id)?format=minimal")
+                                                "\(self.baseURL)/messages/\(metaMsg.id)?format=minimal"
+                                        )
                                     else {
                                         if debug { print("Invalid URL for message \(metaMsg.id)") }
                                         continue
                                     }
-                                    let msgRequest = makeRequest(url: msgUrl)
+                                    let msgRequest = self.makeRequest(url: msgUrl)
                                     // This part could be parallelized more effectively with TaskGroup
                                     // For simplicity here, fetching one by one within the stream producer
                                     // Or, collect all IDs then use TaskGroup.
