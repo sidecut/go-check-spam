@@ -10,6 +10,24 @@
       "request": "launch",
       "mode": "auto",
       "program": "${workspaceFolder}"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:go-check-spam}",
+      "name": "Debug SwiftCheckSpam",
+      "program": "${workspaceFolder:go-check-spam}/.build/debug/SwiftCheckSpam",
+      "preLaunchTask": "swift: Build Debug SwiftCheckSpam"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:go-check-spam}",
+      "name": "Release SwiftCheckSpam",
+      "program": "${workspaceFolder:go-check-spam}/.build/release/SwiftCheckSpam",
+      "preLaunchTask": "swift: Build Release SwiftCheckSpam"
     }
   ]
 }
