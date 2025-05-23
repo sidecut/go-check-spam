@@ -1,6 +1,6 @@
 import Foundation
 
-class GmailService {
+final class GmailService: Sendable {
     private let accessToken: String
     private let session: URLSession
     private let baseURL = "https://www.googleapis.com/gmail/v1/users/me"
@@ -159,7 +159,9 @@ class GmailService {
     }
 
     // Helper for timeout
-    private func withTimeout<T>(seconds: Int, operation: @escaping @Sendable () async throws -> T)
+    private func withTimeout<T: Sendable>(
+        seconds: Int, operation: @escaping @Sendable () async throws -> T
+    )
         async throws -> T
     {
         try await withThrowingTaskGroup(of: T.self) { group in

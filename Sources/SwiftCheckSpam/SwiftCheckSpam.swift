@@ -9,7 +9,7 @@ import Foundation
 
 @main
 struct SwiftCheckSpam: AsyncParsableCommand {
-    static var configuration = CommandConfiguration(
+    static let configuration = CommandConfiguration(
         abstract: "Checks Gmail for spam messages and provides a daily count."
     )
 
