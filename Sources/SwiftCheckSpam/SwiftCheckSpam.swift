@@ -13,7 +13,7 @@ struct SwiftCheckSpam: AsyncParsableCommand {
     @Option(name: .shortAndLong, help: "Number of days to look back for spam.")
     var days: Int = 30
 
-    @Flag(name: .shortAndLong, help: "Enable debug output.")
+    @Flag(name: .long, help: "Enable debug output.")
     var debug: Bool = false
 
     private var cutoffDateString: String {
