@@ -1,5 +1,5 @@
-import Foundation
 import ArgumentParser
+import Foundation
 
 @main
 struct SwiftCheckSpam: AsyncParsableCommand {
@@ -35,17 +35,17 @@ struct SwiftCheckSpam: AsyncParsableCommand {
         }
 
         var dates = spamCounts.keys.sorted()
-        
+
         var total = 0
         var outputState = OutputState.firstLine
-        
+
         let inputFormatter = DateFormatter()
         inputFormatter.dateFormat = "yyyy-MM-dd"
-        inputFormatter.timeZone = TimeZone(secondsFromGMT: 0) // Dates from Gmail are effectively UTC based for day
+        inputFormatter.timeZone = TimeZone(secondsFromGMT: 0)  // Dates from Gmail are effectively UTC based for day
 
         let outputDayFormatter = DateFormatter()
-        outputDayFormatter.dateFormat = "EEE" // Mon, Tue, etc.
-        outputDayFormatter.timeZone = .current // Display day of week in local timezone
+        outputDayFormatter.dateFormat = "EEE"  // Mon, Tue, etc.
+        outputDayFormatter.timeZone = .current  // Display day of week in local timezone
 
         for dateStr in dates {
             let currentState: OutputState
@@ -56,7 +56,7 @@ struct SwiftCheckSpam: AsyncParsableCommand {
             }
 
             if outputState == .beforeDate && currentState == .onOrAfterDate {
-                print() // Blank line separator
+                print()  // Blank line separator
             }
             outputState = currentState
 
@@ -79,7 +79,7 @@ struct SwiftCheckSpam: AsyncParsableCommand {
             print("Cutoff date: \(cutoffDateString)")
             print("Timeout: \(timeout) seconds.")
         }
-        
+
         print("Attempting to authenticate and fetch spam for the past \(days) days.")
         print("Credentials expected at: credentials.json")
         print("Token cache will be at: token.json")
@@ -103,11 +103,13 @@ struct SwiftCheckSpam: AsyncParsableCommand {
                 timeout: timeout,
                 debug: debug
             )
-            
+
             if spamCounts.isEmpty && !debug {
-                 print("No spam messages found for the past \(days) days (based on internalDate).")
+                print("No spam messages found for the past \(days) days (based on internalDate).")
             } else {
-                print("Spam email counts for the past \(days) days (based on internalDate, local timezone for day of week):")
+                print(
+                    "Spam email counts for the past \(days) days (based on internalDate, local timezone for day of week):"
+                )
                 try printSpamSummary(spamCounts: spamCounts)
             }
         } catch AppError.noSpamMessagesFound {
