@@ -70,11 +70,11 @@ final class GmailService: Sendable {
     func listSpamMessages(query: String, timeoutSeconds: Int, debug: Bool) async throws
         -> [GmailMessage]
     {
-        var allMessages: [GmailMessage] = []
         let progressCounter = ProgressCounter()  // New: Use the actor instance
 
         // Overall timeout for the listing and fetching operation
         return try await withTimeout(seconds: timeoutSeconds) {
+            var allMessages: [GmailMessage] = []  // Moved declaration inside the closure
             let messageStream = AsyncStream<GmailMessage> { continuation in
                 Task {
                     defer { continuation.finish() }
