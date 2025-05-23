@@ -63,7 +63,6 @@ class GmailService {
 
         // Overall timeout for the listing and fetching operation
         return try await withTimeout(seconds: timeoutSeconds) {
-            var tasks: [Task<GmailMessage?, Error>] = []
             let messageStream = AsyncStream<GmailMessage> { continuation in
                 Task {
                     defer { continuation.finish() }
