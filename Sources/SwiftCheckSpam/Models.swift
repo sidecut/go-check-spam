@@ -58,7 +58,7 @@ struct OAuthToken: Codable {
 
         // Handle "expires_in" by calculating expiryDate, or decode existing expiryDate
         if let expiresIn = try container.decodeIfPresent(
-            Int.self, forKey: CodingKeys(stringValue: "expires_in")!)
+            Int.self, forKey: CodingKeys(stringValue: "expires_in") ?? .expiryDate)
         {
             self.expiryDate = Date().addingTimeInterval(TimeInterval(expiresIn))
         } else if let storedExpiry = try container.decodeIfPresent(Date.self, forKey: .expiryDate) {
