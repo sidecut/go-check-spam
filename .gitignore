@@ -4,3 +4,5 @@ token.json
 # Executable file
 gocheckspam
 gocheckspam.exe
+
+/target
