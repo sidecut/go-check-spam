@@ -5,6 +5,19 @@ final class GmailService: Sendable {
     private let session: URLSession
     private let baseURL = "https://www.googleapis.com/gmail/v1/users/me"
 
+    // New: Define the actor for managing the counter
+    private actor ProgressCounter: Sendable {
+        private(set) var metadataCount: Int = 0
+
+        func incrementMetadataCount(by amount: Int) {
+            metadataCount += amount
+        }
+
+        func getMetadataCount() -> Int {
+            metadataCount
+        }
+    }
+
     init(accessToken: String, session: URLSession = .shared) {
         self.accessToken = accessToken
         self.session = session
@@ -58,7 +71,7 @@ final class GmailService: Sendable {
         -> [GmailMessage]
     {
         var allMessages: [GmailMessage] = []
-        var totalFetchedMetadata = 0
+        let progressCounter = ProgressCounter()  // New: Use the actor instance
 
         // Overall timeout for the listing and fetching operation
         return try await withTimeout(seconds: timeoutSeconds) {
@@ -88,17 +101,17 @@ final class GmailService: Sendable {
                                 request: request, debug: debug)
 
                             if let messagesMetadata = response.messages {
-                                totalFetchedMetadata += messagesMetadata.count
+                                await progressCounter.incrementMetadataCount(
+                                    by: messagesMetadata.count)  // New: Update actor
                                 if debug {
+                                    let currentMetadataCount =
+                                        await progressCounter.getMetadataCount()  // New: Read from actor
                                     print(
-                                        "\rFetched metadata for \(totalFetchedMetadata) messages...",
+                                        "\rFetched metadata for \(currentMetadataCount) messages...",
                                         terminator: "")
                                 }
 
                                 for metaMsg in messagesMetadata {
-                                    // Fetch minimal message details (includes internalDate)
-                                    // The Go code fetches "minimal" which is efficient.
-                                    // Gmail API GET /messages/{id} with format=minimal
                                     guard
                                         let msgUrl = URL(
                                             string:
@@ -109,14 +122,8 @@ final class GmailService: Sendable {
                                         continue
                                     }
                                     let msgRequest = self.makeRequest(url: msgUrl)
-                                    // This part could be parallelized more effectively with TaskGroup
-                                    // For simplicity here, fetching one by one within the stream producer
-                                    // Or, collect all IDs then use TaskGroup.
-                                    // The Go code uses goroutines per message ID.
-                                    // Let's simulate that with detached tasks feeding the stream.
                                     Task.detached {  // Detached to not block the pagination loop
                                         do {
-                                            // Implement retry logic here if needed for individual messages
                                             let fullMsg: GmailMessage =
                                                 try await self.performRequest(
                                                     request: msgRequest, debug: debug)
@@ -127,7 +134,6 @@ final class GmailService: Sendable {
                                                     "Error fetching message \(metaMsg.id): \(error)"
                                                 )
                                             }
-                                            // Optionally yield an error or just skip
                                         }
                                     }
                                 }
@@ -137,9 +143,6 @@ final class GmailService: Sendable {
                     } catch {
                         if debug { print("Error in listSpamMessages stream: \(error)") }
                         continuation.finish()  // Ensure stream finishes on error
-                        // Rethrowing here won't work as expected for the outer function.
-                        // Error handling for the stream producer needs careful design.
-                        // For now, errors in fetching are logged and skipped.
                     }
                 }
             }
@@ -150,7 +153,8 @@ final class GmailService: Sendable {
 
             if debug { print() }  // Newline after progress
 
-            if allMessages.isEmpty && totalFetchedMetadata == 0 {
+            let finalMetadataCount = await progressCounter.getMetadataCount()  // New: Read from actor
+            if allMessages.isEmpty && finalMetadataCount == 0 {
                 throw AppError.noSpamMessagesFound
             }
             return allMessages
