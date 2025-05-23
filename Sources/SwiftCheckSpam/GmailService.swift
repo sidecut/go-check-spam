@@ -58,7 +58,6 @@ final class GmailService: Sendable {
         -> [GmailMessage]
     {
         var allMessages: [GmailMessage] = []
-        var pageToken: String? = nil
         var totalFetchedMetadata = 0
 
         // Overall timeout for the listing and fetching operation
@@ -66,6 +65,7 @@ final class GmailService: Sendable {
             let messageStream = AsyncStream<GmailMessage> { continuation in
                 Task {
                     defer { continuation.finish() }
+                    var pageToken: String? = nil
                     do {
                         repeat {
                             var components = URLComponents(string: "\(self.baseURL)/messages")!
