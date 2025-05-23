@@ -1,6 +1,7 @@
 import ArgumentParser
 import Foundation
 
+@main
 struct SwiftCheckSpam: AsyncParsableCommand {
     static var configuration = CommandConfiguration(
         abstract: "Checks Gmail for spam messages and provides a daily count."
