@@ -1,5 +1,6 @@
 import Combine  // For future use or if using a library that leverages it
 import Foundation
+import Swifter  // Import Swifter for the HTTP server
 
 #if canImport(AppKit)  // For NSWorkspace
     import AppKit
@@ -14,6 +15,7 @@ class GmailAuthenticator {
     private let tokenURL = URL(string: "https://oauth2.googleapis.com/token")!
     private let authURLBase = "https://accounts.google.com/o/oauth2/v2/auth"
     private let redirectURI = "http://127.0.0.1:8080/oauth2callback"  // Must match one in credentials.json
+    private let callbackPath = "/oauth2callback"  // Define callback path
     private let gmailScope = "https://www.googleapis.com/auth/gmail.readonly"
 
     init(credentialsFilePath: String = "credentials.json", tokenFilePath: String = "token.json") {
@@ -188,28 +190,58 @@ class GmailAuthenticator {
             print("Please open the URL manually.")
         #endif
 
-        // **Local HTTP Server for Callback Handling**
-        // This part is complex. You'd typically use a library (e.g., Swifter, Vapor, NIOHTTP1Server)
-        // to start a server on `redirectURI` (e.g., http://127.0.0.1:8080).
-        // The server would:
-        // 1. Listen for a GET request to "/oauth2callback".
-        // 2. Extract the "code" and "state" query parameters.
-        // 3. Verify the "state" parameter.
-        // 4. Send the "code" back to this function (e.g., via a Combine PassthroughSubject or an async Stream).
-        // 5. Shut down the server.
-        //
-        // For simplicity, this example will prompt for the code manually.
-        // A real implementation should use the local server.
+        // Start local HTTP server to listen for the callback
+        let server = HttpServer()
+        var authCode: String?
+        var receivedState: String?
 
-        print("Enter authorization code: ", terminator: "")
-        guard let authCode = readLine() else {
-            throw AppError.authenticationFailed("No authorization code entered.")
+        server[callbackPath] = { request in
+            if let code = request.queryParams.first(where: { $0.0 == "code" })?.1 {
+                authCode = code
+            }
+            if let st = request.queryParams.first(where: { $0.0 == "state" })?.1 {
+                receivedState = st
+            }
+            // Stop the server after handling the request
+            server.stop()
+            return .ok(.html("Authentication successful! You can close this window."))
+        }
+
+        do {
+            // Extract port from redirectURI
+            guard let redirectURL = URL(string: redirectURI),
+                let port = redirectURL.port
+            else {
+                throw AppError.authenticationFailed("Invalid redirect URI for server.")
+            }
+            try server.start(UInt16(port))
+            print("Local server started on port \(port). Waiting for authentication callback...")
+        } catch {
+            throw AppError.authenticationFailed(
+                "Failed to start local HTTP server: \(error.localizedDescription)")
+        }
+
+        // Wait for the server to receive the callback and set authCode and receivedState
+        // This is a simplified wait; a more robust solution might use a timeout or a different signaling mechanism.
+        while authCode == nil && receivedState == nil {
+            try await Task.sleep(nanoseconds: 100_000_000)  // Sleep for 0.1 seconds
+        }
+
+        if server.operating {  // Ensure server is stopped if it hasn't been already (e.g. if loop exited due to timeout not implemented here)
+            server.stop()
+        }
+
+        guard let receivedAuthCode = authCode else {
+            throw AppError.authenticationFailed("Did not receive authorization code from callback.")
+        }
+        guard let unwrappedReceivedState = receivedState, unwrappedReceivedState == state else {
+            throw AppError.authenticationFailed("State mismatch. CSRF attack suspected.")
         }
 
         // Exchange code for token
         var tokenRequestComponents = URLComponents()
         tokenRequestComponents.queryItems = [
-            URLQueryItem(name: "code", value: authCode),
+            URLQueryItem(name: "code", value: receivedAuthCode),
             URLQueryItem(name: "client_id", value: secret.clientID),
             URLQueryItem(name: "client_secret", value: secret.clientSecret),
             URLQueryItem(name: "redirect_uri", value: redirectURI),
