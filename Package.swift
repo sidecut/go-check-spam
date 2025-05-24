@@ -9,7 +9,8 @@ let package = Package(
         .macOS(.v12)  // Requires macOS 12+ for async/await and other modern Swift features
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.2.0")
+        .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.2.0"),
+        .package(url: "https://github.com/httpswift/swifter.git", .upToNextMajor(from: "1.5.0")),
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
@@ -17,7 +18,8 @@ let package = Package(
         .executableTarget(
             name: "SwiftCheckSpam",
             dependencies: [
-                .product(name: "ArgumentParser", package: "swift-argument-parser")
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                .product(name: "Swifter", package: "swifter"),
             ]
         )
     ]
