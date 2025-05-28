@@ -21,11 +21,11 @@ var days = flag.Int("days", 30, "number of days to look back")
 var debug = flag.Bool("debug", false, "enable debug output")
 var cutoffDate string
 
-func getSpamCounts(srv *gmail.Service) (map[string]int, error) {
+func getSpamCounts(ctx context.Context, srv *gmail.Service) (map[string]int, error) {
 	dailyCounts := make(map[string]int)
 
 	// Get all messages in the SPAM folder
-	messages, err := listSpamMessages(srv)
+	messages, err := listSpamMessages(ctx, srv)
 	if err != nil {
 		return nil, fmt.Errorf("unable to list spam messages: %v", err)
 	}
@@ -62,7 +62,7 @@ func getSpamCounts(srv *gmail.Service) (map[string]int, error) {
 	return dailyCounts, nil
 }
 
-func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
+func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message, error) {
 	var messages []*gmail.Message
 	pageToken := ""
 
@@ -89,7 +89,7 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 			req = req.PageToken(pageToken)
 		}
 
-		r, err := backoff.RetryNotifyWithData(func() (*gmail.ListMessagesResponse, error) {
+		r, err := backoff.Retry(ctx, func() (*gmail.ListMessagesResponse, error) {
 			// Use exponential backoff to handle rate limiting and transient errors
 			r, err := req.Do()
 			return r, err
@@ -112,7 +112,7 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 
 				// fib := NewFib()
 				// for {
-				fullMsg, err := backoff.RetryNotifyWithData(func() (*gmail.Message, error) {
+				fullMsg, err := backoff.Retry(ctx, func() (*gmail.Message, error) {
 					// Fetch the full message using exponential backoff
 					return srv.Users.Messages.Get("me", messageId).Format("minimal").Do()
 				}, backoff.NewExponentialBackOff(), func(err error, wait time.Duration) {
@@ -227,7 +227,7 @@ func main() {
 		log.Fatalf("Unable to retrieve Gmail client: %v", err)
 	}
 
-	spamCounts, err := getSpamCounts(srv)
+	spamCounts, err := getSpamCounts(ctx, srv)
 	if err != nil {
 		log.Fatalf("Error getting spam counts: %v", err)
 	}
