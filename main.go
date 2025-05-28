@@ -92,13 +92,15 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 		r, err := backoff.Retry(ctx, func() (*gmail.ListMessagesResponse, error) {
 			// Use exponential backoff to handle rate limiting and transient errors
 			r, err := req.Do()
-			return r, err
-		}, backoff.NewExponentialBackOff(), func(err error, wait time.Duration) {
-			// Notify on error with the wait duration
-			if *debug {
-				fmt.Printf("Retrying after %v due to error: %v\n", wait, err)
+
+			if err != nil {
+				if *debug {
+					fmt.Printf("Error fetching messages: %v\n", err)
+				}
 			}
-		})
+
+			return r, err
+		}, backoff.WithBackOff(backoff.NewExponentialBackOff()))
 		// Check for errors from the backoff retry
 		if err != nil {
 			return nil, fmt.Errorf("error fetching messages: %v", err)
@@ -114,13 +116,15 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 				// for {
 				fullMsg, err := backoff.Retry(ctx, func() (*gmail.Message, error) {
 					// Fetch the full message using exponential backoff
-					return srv.Users.Messages.Get("me", messageId).Format("minimal").Do()
-				}, backoff.NewExponentialBackOff(), func(err error, wait time.Duration) {
-					// Notify on error with the wait duration
-					if *debug {
-						fmt.Printf("Retrying message %s after %v due to error: %v\n", messageId, wait, err)
+					result, err := srv.Users.Messages.Get("me", messageId).Format("minimal").Do()
+					if err != nil {
+						if *debug {
+							fmt.Printf("Error fetching message %s: %v\n", messageId, err)
+						}
 					}
-				})
+					return result, err
+
+				}, backoff.WithBackOff(backoff.NewExponentialBackOff()))
 				if err == nil {
 					msgChan <- fullMsg
 				} else if *debug {
