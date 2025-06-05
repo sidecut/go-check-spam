@@ -15,20 +15,20 @@ import (
 	"golang.org/x/oauth2"
 )
 
-func getClient(config *oauth2.Config) *http.Client {
+func getClient(ctx context.Context, config *oauth2.Config) *http.Client {
 	// Retrieve a token, saves the token, then returns the generated client.
 	// Changed to return a TokenSource instead of an http.Client
-	ts := getTokenSource(config)
-	return oauth2.NewClient(context.Background(), ts)
+	ts := getTokenSource(ctx, config)
+	return oauth2.NewClient(ctx, ts)
 }
 
 // Retrieve a token, saves the token, then returns the generated client.
 // Changed to return a TokenSource instead of an http.Client
-func getTokenSource(config *oauth2.Config) oauth2.TokenSource {
+func getTokenSource(ctx context.Context, config *oauth2.Config) oauth2.TokenSource {
 	tokFile := "token.json"
 	tok, err := tokenFromFile(tokFile)
 	if err != nil {
-		tok = getTokenFromWeb(config)
+		tok = getTokenFromWeb(ctx, config)
 		saveToken(tokFile, tok)
 	}
 
@@ -38,7 +38,7 @@ func getTokenSource(config *oauth2.Config) oauth2.TokenSource {
 }
 
 // Request a token from the web, then returns the retrieved token.
-func getTokenFromWeb(config *oauth2.Config) *oauth2.Token {
+func getTokenFromWeb(ctx context.Context, config *oauth2.Config) *oauth2.Token {
 	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
 	fmt.Printf("Go to the following link in your browser then type the "+
 		"authorization code: \n%v\n", authURL)
@@ -99,7 +99,7 @@ func getTokenFromWeb(config *oauth2.Config) *oauth2.Token {
 	case authCode = <-authCodeChan:
 	}
 
-	tok, err := config.Exchange(context.TODO(), authCode)
+	tok, err := config.Exchange(ctx, authCode)
 	if err != nil {
 		log.Fatalf("Unable to retrieve token from web: %v", err)
 	}

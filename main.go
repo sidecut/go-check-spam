@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
+	"github.com/cenkalti/backoff/v5"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/gmail/v1"
 	"google.golang.org/api/option"
@@ -21,11 +21,11 @@ var days = flag.Int("days", 30, "number of days to look back")
 var debug = flag.Bool("debug", false, "enable debug output")
 var cutoffDate string
 
-func getSpamCounts(srv *gmail.Service) (map[string]int, error) {
+func getSpamCounts(ctx context.Context, srv *gmail.Service) (map[string]int, error) {
 	dailyCounts := make(map[string]int)
 
 	// Get all messages in the SPAM folder
-	messages, err := listSpamMessages(srv)
+	messages, err := listSpamMessages(ctx, srv)
 	if err != nil {
 		return nil, fmt.Errorf("unable to list spam messages: %v", err)
 	}
@@ -62,7 +62,7 @@ func getSpamCounts(srv *gmail.Service) (map[string]int, error) {
 	return dailyCounts, nil
 }
 
-func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
+func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message, error) {
 	var messages []*gmail.Message
 	pageToken := ""
 
@@ -89,16 +89,18 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 			req = req.PageToken(pageToken)
 		}
 
-		r, err := backoff.RetryNotifyWithData(func() (*gmail.ListMessagesResponse, error) {
+		r, err := backoff.Retry(ctx, func() (*gmail.ListMessagesResponse, error) {
 			// Use exponential backoff to handle rate limiting and transient errors
 			r, err := req.Do()
-			return r, err
-		}, backoff.NewExponentialBackOff(), func(err error, wait time.Duration) {
-			// Notify on error with the wait duration
-			if *debug {
-				fmt.Printf("Retrying after %v due to error: %v\n", wait, err)
+
+			if err != nil {
+				if *debug {
+					fmt.Printf("Error fetching messages: %v\n", err)
+				}
 			}
-		})
+
+			return r, err
+		}, backoff.WithBackOff(backoff.NewExponentialBackOff()))
 		// Check for errors from the backoff retry
 		if err != nil {
 			return nil, fmt.Errorf("error fetching messages: %v", err)
@@ -112,15 +114,17 @@ func listSpamMessages(srv *gmail.Service) ([]*gmail.Message, error) {
 
 				// fib := NewFib()
 				// for {
-				fullMsg, err := backoff.RetryNotifyWithData(func() (*gmail.Message, error) {
+				fullMsg, err := backoff.Retry(ctx, func() (*gmail.Message, error) {
 					// Fetch the full message using exponential backoff
-					return srv.Users.Messages.Get("me", messageId).Format("minimal").Do()
-				}, backoff.NewExponentialBackOff(), func(err error, wait time.Duration) {
-					// Notify on error with the wait duration
-					if *debug {
-						fmt.Printf("Retrying message %s after %v due to error: %v\n", messageId, wait, err)
+					result, err := srv.Users.Messages.Get("me", messageId).Format("minimal").Do()
+					if err != nil {
+						if *debug {
+							fmt.Printf("Error fetching message %s: %v\n", messageId, err)
+						}
 					}
-				})
+					return result, err
+
+				}, backoff.WithBackOff(backoff.NewExponentialBackOff()))
 				if err == nil {
 					msgChan <- fullMsg
 				} else if *debug {
@@ -220,14 +224,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("Unable to parse client secret file to config: %v", err)
 	}
-	client := getClient(config)
+	client := getClient(ctx, config)
 
 	srv, err := gmail.NewService(ctx, option.WithHTTPClient(client))
 	if err != nil {
 		log.Fatalf("Unable to retrieve Gmail client: %v", err)
 	}
 
-	spamCounts, err := getSpamCounts(srv)
+	spamCounts, err := getSpamCounts(ctx, srv)
 	if err != nil {
 		log.Fatalf("Error getting spam counts: %v", err)
 	}
