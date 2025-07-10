@@ -43,7 +43,7 @@ func getSpamCounts(ctx context.Context, srv *gmail.Service) (map[string]int, err
 		// Safety check for invalid dates
 		if internalDateMs <= 0 {
 			if *debug {
-				fmt.Printf("Warning: Invalid internalDate (%d) for message ID %s\n", internalDateMs, m.Id)
+				log.Printf("Warning: Invalid internalDate (%d) for message ID %s", internalDateMs, m.Id)
 			}
 			continue
 		}
@@ -95,7 +95,7 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 
 			if err != nil {
 				if *debug {
-					fmt.Printf("Error fetching messages: %v\n", err)
+					log.Printf("Error fetching messages: %v", err)
 				}
 			}
 
@@ -112,14 +112,12 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 			go func(messageId string) {
 				defer wg.Done()
 
-				// fib := NewFib()
-				// for {
 				fullMsg, err := backoff.Retry(ctx, func() (*gmail.Message, error) {
 					// Fetch the full message using exponential backoff
 					result, err := srv.Users.Messages.Get("me", messageId).Format("minimal").Do()
 					if err != nil {
 						if *debug {
-							fmt.Printf("Error fetching message %s: %v\n", messageId, err)
+							log.Printf("Error fetching message %s: %v", messageId, err)
 						}
 					}
 					return result, err
@@ -128,7 +126,7 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 				if err == nil {
 					msgChan <- fullMsg
 				} else if *debug {
-					fmt.Printf("Error fetching message %s: %v\n", messageId, err)
+					log.Printf("Error fetching message %s: %v", messageId, err)
 				}
 			}(msg.Id)
 			total++
@@ -200,7 +198,7 @@ func printSpamSummary(spamCounts map[string]int) {
 		total += count
 		dateValue, err := time.Parse("2006-01-02", date)
 		if err != nil {
-			fmt.Printf("Error parsing date: %v\n", err)
+			log.Printf("Error parsing date: %v", err)
 			continue
 		}
 		dayOfWeek := dateValue.Format("Mon")
