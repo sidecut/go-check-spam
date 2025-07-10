@@ -43,9 +43,15 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config) *oauth2.Token {
 	fmt.Printf("Go to the following link in your browser then type the "+
 		"authorization code: \n%v\n", authURL)
 
-	var authCodeChan = make(chan string)
+	var authCodeChan = make(chan string, 2) // Buffered to prevent goroutine blocking
 
 	srv := &http.Server{Addr: ":80"}
+
+	// Ensure server cleanup
+	defer func() {
+		srv.Shutdown(context.Background())
+	}()
+
 	go func() {
 		// Start a web server to handle the callback and exchange the code.
 		http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -55,14 +61,16 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config) *oauth2.Token {
 				return
 			}
 			authCode := r.URL.Query().Get("code")
-			fmt.Println("") // Print a newline because there's a dangling "Enter authorization code: " in the terminal
-			fmt.Printf("Received authorization code: %s\n", authCode)
-			fmt.Fprintf(w, "Authorization received. You can close this window.")
-			// Send the auth code to the channel
-			authCodeChan <- authCode
-
-			// Shutdown the server
-			// srv.Shutdown(context.Background())}
+			if authCode != "" {
+				fmt.Println("") // Print a newline because there's a dangling "Enter authorization code: " in the terminal
+				fmt.Printf("Received authorization code: %s\n", authCode)
+				fmt.Fprintf(w, "Authorization received. You can close this window.")
+				// Send the auth code to the channel (non-blocking due to buffer)
+				select {
+				case authCodeChan <- authCode:
+				default:
+				}
+			}
 		})
 
 		if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
@@ -78,7 +86,11 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config) *oauth2.Token {
 		if _, err := fmt.Scan(&authCode); err != nil {
 			log.Fatalf("Unable to scan authorization code: %v", err)
 		}
-		authCodeChan <- authCode
+		// Send the auth code to the channel (non-blocking due to buffer)
+		select {
+		case authCodeChan <- authCode:
+		default:
+		}
 	}()
 
 	// Open the URL in the user's browser.
