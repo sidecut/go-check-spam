@@ -140,7 +140,7 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 	}
 
 	fmt.Print("\r") // erase the in progress count
-	wg.Done()
+	// wg.Done()
 
 	// Collect results, taking no more than 60 seconds
 	// This is to prevent the program from hanging indefinitely
