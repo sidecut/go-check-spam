@@ -39,13 +39,17 @@ func getTokenSource(ctx context.Context, config *oauth2.Config) oauth2.TokenSour
 
 // Request a token from the web, then returns the retrieved token.
 func getTokenFromWeb(ctx context.Context, config *oauth2.Config) *oauth2.Token {
+	// Update redirect URI to match our server
+	config.RedirectURL = "http://127.0.0.1:8080"
+
 	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
 	fmt.Printf("Go to the following link in your browser then type the "+
 		"authorization code: \n%v\n", authURL)
 
 	var authCodeChan = make(chan string, 2) // Buffered to prevent goroutine blocking
 
-	srv := &http.Server{Addr: ":80"}
+	// Use a random high port for localhost only
+	srv := &http.Server{Addr: "127.0.0.1:8080"}
 
 	// Ensure server cleanup
 	defer func() {

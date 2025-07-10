@@ -2,13 +2,16 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"math/rand"
 	"os"
+	"os/signal"
 	"sort"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/cenkalti/backoff/v5"
@@ -21,6 +24,7 @@ var timeout = flag.Int("timeout", 60, "timeout in seconds")
 var initialDelay = flag.Int("initial-delay", 1000, "max initial delay in milliseconds before starting to fetch messages")
 var days = flag.Int("days", 30, "number of days to look back")
 var debug = flag.Bool("debug", false, "enable debug output")
+var maxWorkers = flag.Int("max-workers", 10, "maximum number of concurrent workers")
 var cutoffDate string
 
 func getSpamCounts(ctx context.Context, srv *gmail.Service) (map[string]int, error) {
@@ -72,49 +76,37 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 	var messages []*gmail.Message
 	pageToken := ""
 
-	// Create a channel to receive messages
+	// Create channels for communication
 	msgChan := make(chan *gmail.Message)
+	jobChan := make(chan string, 100) // Buffered channel for message IDs
+
 	// Create a WaitGroup to track goroutines
 	var wg sync.WaitGroup
 
-	// Calculate the date 'days' ago
-	query := "after:" + cutoffDate // Gmail query to filter messages
-	fmt.Printf("Gmail query: %s\n", query)
-	total := 0
-
-	for {
-		req := srv.Users.Messages.List("me").LabelIds("SPAM").Q(query)
-		if pageToken != "" {
-			req = req.PageToken(pageToken)
-		}
-
-		r, err := backoff.Retry(ctx, func() (*gmail.ListMessagesResponse, error) {
-			// Use exponential backoff to handle rate limiting and transient errors
-			r, err := req.Do()
-
-			if err != nil {
-				if *debug {
-					log.Printf("Error fetching messages: %v", err)
+	// Start worker pool
+	for i := 0; i < *maxWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for messageId := range jobChan {
+				// Check if context is cancelled
+				select {
+				case <-workerCtx.Done():
+					return
+				default:
 				}
-			}
-
-			return r, err
-		}, backoff.WithBackOff(backoff.NewExponentialBackOff()))
-		// Check for errors from the backoff retry
-		if err != nil {
-			return nil, fmt.Errorf("error fetching messages: %v", err)
-		}
-
-		// Process messages in parallel
-		for _, msg := range r.Messages {
-			wg.Add(1)
-			go func(messageId string) {
-				defer wg.Done()
 
 				// delay a random interval between 0 and initialDelay milliseconds to avoid hitting rate limits
 				time.Sleep(time.Duration(rand.Intn(*initialDelay)) * time.Millisecond)
 
 				fullMsg, err := backoff.Retry(workerCtx, func() (*gmail.Message, error) {
+					// Check if context is cancelled before making API call
+					select {
+					case <-workerCtx.Done():
+						return nil, workerCtx.Err()
+					default:
+					}
+
 					// Fetch the full message using exponential backoff
 					result, err := srv.Users.Messages.Get("me", messageId).Format("minimal").Do()
 					if err != nil {
@@ -125,38 +117,83 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 					return result, err
 
 				}, backoff.WithBackOff(backoff.NewExponentialBackOff()))
+
+				// Only try to send if we got a successful result and context isn't cancelled
 				if err == nil {
 					select {
 					case msgChan <- fullMsg:
 					case <-workerCtx.Done():
 						return
 					}
-				} else if *debug {
+				} else if *debug && !errors.Is(err, context.Canceled) {
 					log.Printf("Error fetching message %s: %v", messageId, err)
 				}
-			}(msg.Id)
-			total++
-			fmt.Printf("\r%d", total)
-		}
-
-		pageToken = r.NextPageToken
-		if pageToken == "" {
-			break
-		}
+			}
+		}()
 	}
 
-	// Start a goroutine to close channels when all workers are done
+	// Calculate the date 'days' ago
+	query := "after:" + cutoffDate // Gmail query to filter messages
+	fmt.Printf("Gmail query: %s\n", query)
+	total := 0
+
+	// Fetch message IDs and send to workers
+	go func() {
+		defer close(jobChan)
+		for {
+			req := srv.Users.Messages.List("me").LabelIds("SPAM").Q(query)
+			if pageToken != "" {
+				req = req.PageToken(pageToken)
+			}
+
+			r, err := backoff.Retry(ctx, func() (*gmail.ListMessagesResponse, error) {
+				// Use exponential backoff to handle rate limiting and transient errors
+				r, err := req.Do()
+
+				if err != nil {
+					if *debug {
+						log.Printf("Error fetching messages: %v", err)
+					}
+				}
+
+				return r, err
+			}, backoff.WithBackOff(backoff.NewExponentialBackOff()))
+			// Check for errors from the backoff retry
+			if err != nil {
+				log.Printf("Error fetching message list: %v", err)
+				cancel()
+				return
+			}
+
+			// Send message IDs to worker pool
+			for _, msg := range r.Messages {
+				select {
+				case jobChan <- msg.Id:
+					total++
+					fmt.Printf("\r%d", total)
+				case <-workerCtx.Done():
+					return
+				}
+			}
+
+			pageToken = r.NextPageToken
+			if pageToken == "" {
+				break
+			}
+		}
+	}()
+
+	// Start a goroutine to close message channel when all workers are done
 	go func() {
 		wg.Wait()
 		close(msgChan)
 	}()
 
 	fmt.Print("\r") // erase the in progress count
-	// wg.Done()
 
-	// Collect results, taking no more than 60 seconds
+	// Collect results, taking no more than timeout seconds
 	// This is to prevent the program from hanging indefinitely
-	timeout := time.After(time.Duration(*timeout) * time.Second)
+	timeoutTimer := time.After(time.Duration(*timeout) * time.Second)
 	for {
 		select {
 		case msg, ok := <-msgChan:
@@ -165,7 +202,7 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 			} else {
 				messages = append(messages, msg)
 			}
-		case <-timeout:
+		case <-timeoutTimer:
 			cancel() // Cancel worker context before returning
 			return nil, fmt.Errorf("timed out waiting for messages")
 		case <-ctx.Done():
@@ -225,9 +262,32 @@ func printSpamSummary(spamCounts map[string]int) {
 
 func main() {
 	flag.Parse()
+
+	// Validate configuration
+	if *days <= 0 {
+		log.Fatalf("Days must be positive, got: %d", *days)
+	}
+	if *timeout <= 0 {
+		log.Fatalf("Timeout must be positive, got: %d", *timeout)
+	}
+	if *maxWorkers <= 0 {
+		log.Fatalf("Max workers must be positive, got: %d", *maxWorkers)
+	}
+
 	cutoffDate = time.Now().AddDate(0, 0, -*days).Format("2006-01-02")
 
-	ctx := context.Background()
+	// Set up signal handling for graceful shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		log.Println("Received interrupt signal, shutting down gracefully...")
+		cancel()
+	}()
+
 	b, err := os.ReadFile("credentials.json") // Download from Google Cloud Console
 	if err != nil {
 		log.Fatalf("Unable to read client secret file: %v", err)
