@@ -124,7 +124,12 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 
 				}, backoff.WithBackOff(backoff.NewExponentialBackOff()))
 				if err == nil {
-					msgChan <- fullMsg
+					// Safely send to channel
+					select {
+					case msgChan <- fullMsg:
+					case <-ctx.Done():
+						return
+					}
 				} else if *debug {
 					log.Printf("Error fetching message %s: %v", messageId, err)
 				}
