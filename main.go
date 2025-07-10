@@ -63,6 +63,10 @@ func getSpamCounts(ctx context.Context, srv *gmail.Service) (map[string]int, err
 }
 
 func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message, error) {
+	// Create cancellable context for workers
+	workerCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	var messages []*gmail.Message
 	pageToken := ""
 
@@ -112,7 +116,7 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 			go func(messageId string) {
 				defer wg.Done()
 
-				fullMsg, err := backoff.Retry(ctx, func() (*gmail.Message, error) {
+				fullMsg, err := backoff.Retry(workerCtx, func() (*gmail.Message, error) {
 					// Fetch the full message using exponential backoff
 					result, err := srv.Users.Messages.Get("me", messageId).Format("minimal").Do()
 					if err != nil {
