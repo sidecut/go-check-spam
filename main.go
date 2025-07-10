@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -73,13 +74,6 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 	// Create a WaitGroup to track goroutines
 	var wg sync.WaitGroup
 
-	// Start a goroutine to close channels when all workers are done
-	wg.Add(1)
-	go func() {
-		wg.Wait()
-		close(msgChan)
-	}()
-
 	// Calculate the date 'days' ago
 	query := "after:" + cutoffDate // Gmail query to filter messages
 	fmt.Printf("Gmail query: %s\n", query)
@@ -114,10 +108,24 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 			go func(messageId string) {
 				defer wg.Done()
 
+				// Check if context is cancelled before starting work
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+
 				// delay a random interval between 0 and initialDelay milliseconds to avoid hitting rate limits
 				time.Sleep(time.Duration(rand.Intn(*initialDelay)) * time.Millisecond)
 
 				fullMsg, err := backoff.Retry(ctx, func() (*gmail.Message, error) {
+					// Check context again before API call
+					select {
+					case <-ctx.Done():
+						return nil, ctx.Err()
+					default:
+					}
+
 					// Fetch the full message using exponential backoff
 					result, err := srv.Users.Messages.Get("me", messageId).Format("minimal").Do()
 					if err != nil {
@@ -128,9 +136,14 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 					return result, err
 
 				}, backoff.WithBackOff(backoff.NewExponentialBackOff()))
+
 				if err == nil {
-					msgChan <- fullMsg
-				} else if *debug {
+					select {
+					case msgChan <- fullMsg:
+					case <-ctx.Done():
+						return
+					}
+				} else if *debug && !errors.Is(err, context.Canceled) {
 					log.Printf("Error fetching message %s: %v", messageId, err)
 				}
 			}(msg.Id)
@@ -144,11 +157,15 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 		}
 	}
 
-	fmt.Print("\r") // erase the in progress count
-	wg.Done()
+	// Start a goroutine to close channel when all workers are done
+	go func() {
+		wg.Wait()
+		close(msgChan)
+	}()
 
-	// Collect results, taking no more than 60 seconds
-	// This is to prevent the program from hanging indefinitely
+	fmt.Print("\r") // erase the in progress count
+
+	// Collect results, taking no more than specified timeout seconds
 	timeout := time.After(time.Duration(*timeout) * time.Second)
 	for {
 		select {
@@ -160,6 +177,8 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 			}
 		case <-timeout:
 			return nil, fmt.Errorf("timed out waiting for messages")
+		case <-ctx.Done():
+			return nil, ctx.Err()
 		}
 
 		if msgChan == nil {
