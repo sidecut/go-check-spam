@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"sort"
 	"sync"
@@ -111,6 +112,9 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 			wg.Add(1)
 			go func(messageId string) {
 				defer wg.Done()
+
+				// delay a random interval between 0 and 100 milliseconds to avoid hitting rate limits
+				time.Sleep(time.Duration(rand.Intn(100)) * time.Millisecond)
 
 				fullMsg, err := backoff.Retry(ctx, func() (*gmail.Message, error) {
 					// Fetch the full message using exponential backoff
