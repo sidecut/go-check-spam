@@ -85,7 +85,7 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config) *oauth2.Token {
 	err := openBrowser(authURL)
 	if err != nil {
 		log.Printf("Error opening browser: %v", err)
-		log.Println("Please manually open the URL in your browser.")
+		log.Printf("Please manually open the URL in your browser.")
 	}
 
 	// Wait for the authorization code to be received from either the terminal *or* the web server.
