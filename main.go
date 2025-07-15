@@ -74,8 +74,8 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 	pageToken := ""
 
 	// Create channels for the worker pool
-	msgChan := make(chan *gmail.Message)
-	jobChan := make(chan string, 100) // Buffered channel for message IDs
+	msgChan := make(chan *gmail.Message, 100) // Buffered to prevent worker blocking
+	jobChan := make(chan string, 100)         // Buffered channel for message IDs
 	var wg sync.WaitGroup
 
 	// Start worker pool
@@ -128,12 +128,19 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 		defer close(jobChan)
 
 		for {
+			// Check if context is cancelled before making API calls
+			select {
+			case <-workerCtx.Done():
+				return
+			default:
+			}
+
 			req := srv.Users.Messages.List("me").LabelIds("SPAM").Q(query)
 			if pageToken != "" {
 				req = req.PageToken(pageToken)
 			}
 
-			r, err := backoff.Retry(ctx, func() (*gmail.ListMessagesResponse, error) {
+			r, err := backoff.Retry(workerCtx, func() (*gmail.ListMessagesResponse, error) {
 				// Use exponential backoff to handle rate limiting and transient errors
 				r, err := req.Do()
 
