@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"math/rand"
 	"os"
 	"sort"
 	"sync"
@@ -85,7 +84,12 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 	fmt.Printf("Gmail query: %s\n", query)
 	total := 0
 
+	page := 1
 	for {
+		if *debug {
+			log.Printf("Fetching page %d of spam messages...", page)
+			page++
+		}
 		req := srv.Users.Messages.List("me").LabelIds("SPAM").Q(query)
 		if pageToken != "" {
 			req = req.PageToken(pageToken)
@@ -115,21 +119,21 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 				defer wg.Done()
 
 				// delay a random interval between 0 and initialDelay milliseconds to avoid hitting rate limits
-				time.Sleep(time.Duration(rand.Intn(*initialDelay)) * time.Millisecond)
+				// time.Sleep(time.Duration(rand.Intn(*initialDelay)) * time.Millisecond)
 
-				fullMsg, err := backoff.Retry(ctx, func() (*gmail.Message, error) {
-					// Fetch the full message using exponential backoff
-					result, err := srv.Users.Messages.Get("me", messageId).Format("minimal").Do()
-					if err != nil {
-						if *debug {
-							log.Printf("Error fetching message %s: %v", messageId, err)
-						}
-					}
-					return result, err
+				// fullMsg, err := backoff.Retry(ctx, func() (*gmail.Message, error) {
+				// 	// Fetch the full message using exponential backoff
+				// 	result, err := srv.Users.Messages.Get("me", messageId).Format("minimal").Do()
+				// 	if err != nil {
+				// 		if *debug {
+				// 			log.Printf("Error fetching message %s: %v", messageId, err)
+				// 		}
+				// 	}
+				// 	return result, err
 
-				}, backoff.WithBackOff(backoff.NewExponentialBackOff()))
+				// }, backoff.WithBackOff(backoff.NewExponentialBackOff()))
 				if err == nil {
-					msgChan <- fullMsg
+					msgChan <- msg
 				} else if *debug {
 					log.Printf("Error fetching message %s: %v", messageId, err)
 				}
