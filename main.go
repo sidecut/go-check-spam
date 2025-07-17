@@ -8,12 +8,14 @@ import (
 	"math/rand"
 	"os"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/cenkalti/backoff/v5"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/gmail/v1"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 )
 
@@ -121,6 +123,20 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 					// Fetch the full message using exponential backoff
 					result, err := srv.Users.Messages.Get("me", messageId).Format("minimal").Do()
 					if err != nil {
+						// googleapi.Error 429 indicates rate limiting
+						if gErr, ok := err.(*googleapi.Error); ok && gErr.Code == 429 {
+							if *debug {
+								fmt.Printf("Rate limit exceeded for message %s, retrying...\n", messageId)
+							}
+							seconds, err := strconv.ParseInt(gErr.Header.Get("Retry-After"), 10, 64)
+							if err == nil {
+								return nil, backoff.RetryAfter(int(seconds))
+							}
+							return nil, err // Retry will be handled by backoff
+						}
+						// For other errors, log and return
+						// This will also retry the operation
+						// but we can log it for debugging purposes
 						if *debug {
 							log.Printf("Error fetching message %s: %v", messageId, err)
 						}
