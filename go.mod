@@ -5,7 +5,7 @@ go 1.24.0
 require (
 	github.com/cenkalti/backoff/v5 v5.0.2
 	golang.org/x/oauth2 v0.30.0
-	google.golang.org/api v0.241.0
+	google.golang.org/api v0.242.0
 )
 
 require (
@@ -24,11 +24,11 @@ require (
 	go.opentelemetry.io/otel v1.37.0 // indirect
 	go.opentelemetry.io/otel/metric v1.37.0 // indirect
 	go.opentelemetry.io/otel/trace v1.37.0 // indirect
-	golang.org/x/crypto v0.39.0 // indirect
-	golang.org/x/net v0.41.0 // indirect
+	golang.org/x/crypto v0.40.0 // indirect
+	golang.org/x/net v0.42.0 // indirect
 	golang.org/x/sys v0.34.0 // indirect
 	golang.org/x/text v0.27.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250707201910-8d1bb00bc6a7 // indirect
-	google.golang.org/grpc v1.73.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250715232539-7130f93afb79 // indirect
+	google.golang.org/grpc v1.74.0 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
 )
