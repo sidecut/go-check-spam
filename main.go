@@ -110,9 +110,8 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 
 		// Process messages in parallel
 		for _, msg := range r.Messages {
-			wg.Add(1)
-			go func(messageId string) {
-				defer wg.Done()
+			wg.Go(func() {
+				messageId := msg.Id
 
 				// delay a random interval between 0 and initialDelay milliseconds to avoid hitting rate limits
 				time.Sleep(time.Duration(rand.Intn(*initialDelay)) * time.Millisecond)
@@ -133,7 +132,7 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 				} else if *debug {
 					log.Printf("Error fetching message %s: %v", messageId, err)
 				}
-			}(msg.Id)
+			})
 			total++
 			fmt.Printf("\r%d", total)
 		}
