@@ -125,15 +125,25 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config) (*oauth2.Token,
 		log.Printf("Please manually open the URL in your browser.")
 	}
 
-	// Also accept a manually pasted code on stdin as a fallback.
+	// Also accept a manually pasted code on stdin as a fallback. Use a cancellable
+	// context so the goroutine stops when the auth flow completes.
+	stdinCtx, stdinCancel := context.WithCancel(context.Background())
+	defer stdinCancel()
 	go func() {
 		reader := bufio.NewReader(os.Stdin)
-		input, _ := reader.ReadString('\n')
-		input = strings.TrimSpace(input)
-		if input != "" {
+		for {
 			select {
-			case authCodeChan <- input:
+			case <-stdinCtx.Done():
+				return
 			default:
+			}
+			input, _ := reader.ReadString('\n')
+			input = strings.TrimSpace(input)
+			if input != "" {
+				select {
+				case authCodeChan <- input:
+				default:
+				}
 			}
 		}
 	}()
@@ -143,6 +153,7 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config) (*oauth2.Token,
 	select {
 	case <-time.After(5 * time.Minute):
 		// Gracefully stop the HTTP server and return an error
+		stdinCancel()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := srv.Shutdown(shutdownCtx); err != nil {
@@ -150,6 +161,8 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config) (*oauth2.Token,
 		}
 		return nil, fmt.Errorf("timed out waiting for authorization code")
 	case authCode = <-authCodeChan:
+		// stop stdin goroutine as we got the code
+		stdinCancel()
 	}
 
 	// Gracefully stop the HTTP server now that we have the code.
@@ -216,7 +229,8 @@ func openBrowser(url string) error {
 	switch runtime.GOOS {
 	case "windows":
 		cmd = "cmd"
-		args = []string{"/c", "start", url}
+		// Use empty title to handle URLs with special characters
+		args = []string{"/c", "start", "", url}
 	case "darwin":
 		cmd = "open"
 		args = []string{url}
