@@ -43,42 +43,30 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config) *oauth2.Token {
 	fmt.Printf("Go to the following link in your browser then type the "+
 		"authorization code: \n%v\n", authURL)
 
-	var authCodeChan = make(chan string)
+	authCodeChan := make(chan string, 1)
+	mux := http.NewServeMux()
+	srv := &http.Server{Addr: ":80", Handler: mux}
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// We get several requests to the root URL, so we need to filter out the favicon request.
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		authCode := r.URL.Query().Get("code")
+		if authCode != "" {
+			select {
+			case authCodeChan <- authCode:
+			default:
+			}
+		}
+		fmt.Fprintln(w, "Authorization received. You can close this window.")
+	})
 
-	srv := &http.Server{Addr: ":80"}
 	go func() {
 		// Start a web server to handle the callback and exchange the code.
-		http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-			// We get several requests to the root URL, so we need to filter out the favicon request.
-			if r.URL.Path != "/" {
-				http.NotFound(w, r)
-				return
-			}
-			authCode := r.URL.Query().Get("code")
-			fmt.Println("") // Print a newline because there's a dangling "Enter authorization code: " in the terminal
-			fmt.Printf("Received authorization code: %s\n", authCode)
-			fmt.Fprintf(w, "Authorization received. You can close this window.")
-			// Send the auth code to the channel
-			authCodeChan <- authCode
-
-			// Shutdown the server
-			// srv.Shutdown(context.Background())}
-		})
-
 		if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("Unable to start HTTP server: %v", err)
 		}
-	}()
-
-	go func() {
-		// Wait for the user to enter the authorization code.
-		fmt.Print("Enter authorization code: ")
-
-		var authCode string
-		if _, err := fmt.Scan(&authCode); err != nil {
-			log.Fatalf("Unable to scan authorization code: %v", err)
-		}
-		authCodeChan <- authCode
 	}()
 
 	// Open the URL in the user's browser.
