@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"golang.org/x/oauth2/google"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/api/gmail/v1"
@@ -75,7 +76,7 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) (map[string]int, 
 		var listResp *gmail.ListMessagesResponse
 		// Wrap the request with a context check so we exit quickly if the
 		// parent context is cancelled.
-		if err := retryWithBackoff(ctx, func() error {
+		if err := backoff.Retry(func() error {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -87,7 +88,7 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) (map[string]int, 
 				log.Printf("Error fetching messages list: %v", err)
 			}
 			return err
-		}); err != nil {
+		}, backoff.NewExponentialBackOff()); err != nil {
 			return nil, fmt.Errorf("error fetching messages: %v", err)
 		}
 
@@ -105,7 +106,7 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) (map[string]int, 
 				time.Sleep(time.Duration(rand.Intn(*initialDelay)) * time.Millisecond)
 
 				var fullMsg *gmail.Message
-				if err := retryWithBackoff(ctx, func() error {
+				if err := backoff.Retry(func() error {
 					select {
 					case <-ctx.Done():
 						return ctx.Err()
@@ -117,7 +118,7 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) (map[string]int, 
 						log.Printf("Error fetching message %s: %v", m.Id, err)
 					}
 					return err
-				}); err != nil {
+				}, backoff.NewExponentialBackOff()); err != nil {
 					if *debug {
 						log.Printf("Failed to fetch message %s: %v", m.Id, err)
 					}

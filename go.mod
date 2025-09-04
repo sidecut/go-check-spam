@@ -3,6 +3,7 @@ module github.com/sidecut/gocheckspam
 go 1.25
 
 require (
+	github.com/cenkalti/backoff/v4 v4.0.0
 	golang.org/x/oauth2 v0.30.0
 	golang.org/x/sync v0.16.0
 	google.golang.org/api v0.242.0
