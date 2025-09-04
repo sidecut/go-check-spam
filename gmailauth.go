@@ -33,7 +33,7 @@ func getTokenSource(ctx context.Context, config *oauth2.Config) oauth2.TokenSour
 	}
 
 	// Create a new TokenSource that can refresh the token
-	ts := config.TokenSource(context.Background(), tok)
+	ts := config.TokenSource(ctx, tok)
 	return ts
 }
 
@@ -45,11 +45,14 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config) *oauth2.Token {
 
 	var authCodeChan = make(chan string)
 
-	srv := &http.Server{Addr: ":80"}
+	// Use a non-privileged loopback port and a custom ServeMux so we don't
+	// interfere with global handlers. Shutdown the server after receiving
+	// the code.
+	mux := http.NewServeMux()
+	addr := fmt.Sprintf(":%d", *oauthPort)
+	srv := &http.Server{Addr: addr, Handler: mux}
 	go func() {
-		// Start a web server to handle the callback and exchange the code.
-		http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-			// We get several requests to the root URL, so we need to filter out the favicon request.
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path != "/" {
 				http.NotFound(w, r)
 				return
@@ -58,11 +61,13 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config) *oauth2.Token {
 			fmt.Println("") // Print a newline because there's a dangling "Enter authorization code: " in the terminal
 			fmt.Printf("Received authorization code: %s\n", authCode)
 			fmt.Fprintf(w, "Authorization received. You can close this window.")
-			// Send the auth code to the channel
-			authCodeChan <- authCode
+			// Send the auth code to the channel (non-blocking by design here)
+			go func() { authCodeChan <- authCode }()
 
-			// Shutdown the server
-			// srv.Shutdown(context.Background())}
+			// Shutdown the server asynchronously
+			go func() {
+				_ = srv.Shutdown(context.Background())
+			}()
 		})
 
 		if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
