@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -62,15 +63,22 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config) *oauth2.Token {
 		fmt.Fprintln(w, "Authorization received. You can close this window.")
 	})
 
+	ln, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		log.Fatalf("Unable to start HTTP server: %v", err)
+	}
+	defer ln.Close()
+	port := ln.Addr().(*net.TCPAddr).Port
+	config.RedirectURL = fmt.Sprintf("http://localhost:%d/", port)
 	go func() {
 		// Start a web server to handle the callback and exchange the code.
-		if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("Unable to start HTTP server: %v", err)
 		}
 	}()
 
 	// Open the URL in the user's browser.
-	err := openBrowser(authURL)
+	err = openBrowser(authURL)
 	if err != nil {
 		log.Printf("Error opening browser: %v", err)
 		log.Printf("Please manually open the URL in your browser.")
