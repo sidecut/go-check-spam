@@ -20,35 +20,51 @@ import (
 	"golang.org/x/oauth2"
 )
 
-func getClient(ctx context.Context, config *oauth2.Config) *http.Client {
-	// Retrieve a token, saves the token, then returns the generated client.
-	// Changed to return a TokenSource instead of an http.Client
-	ts := getTokenSource(ctx, config)
-	return oauth2.NewClient(ctx, ts)
+func getClient(ctx context.Context, config *oauth2.Config) (*http.Client, error) {
+	// Retrieve a token source (which may prompt the user), then return a configured http.Client.
+	ts, err := getTokenSource(ctx, config)
+	if err != nil {
+		return nil, err
+	}
+	return oauth2.NewClient(ctx, ts), nil
 }
 
 // Retrieve a token, saves the token, then returns the generated client.
 // Changed to return a TokenSource instead of an http.Client
-func getTokenSource(ctx context.Context, config *oauth2.Config) oauth2.TokenSource {
-	tokFile := "token.json"
-	tok, err := tokenFromFile(tokFile)
-	if err != nil {
-		tok = getTokenFromWeb(ctx, config)
-		saveToken(tokFile, tok)
+func getTokenSource(ctx context.Context, config *oauth2.Config) (oauth2.TokenSource, error) {
+	tokFile := os.Getenv("TOKEN_FILE")
+	if tokFile == "" {
+		tokFile = "token.json"
 	}
 
-	// Create a new TokenSource that can refresh the token
+	tok, err := tokenFromFile(tokFile)
+	if err != nil {
+		tok, err = getTokenFromWeb(ctx, config)
+		if err != nil {
+			return nil, fmt.Errorf("failed to obtain token from web: %w", err)
+		}
+		if err := saveToken(tokFile, tok); err != nil {
+			log.Printf("Warning: failed to save token to %s: %v", tokFile, err)
+		}
+	}
+
+	// Create a TokenSource that can refresh the token
 	ts := config.TokenSource(ctx, tok)
 	if _, err := ts.Token(); err != nil {
-		tok = getTokenFromWeb(ctx, config)
-		saveToken(tokFile, tok)
+		tok, err = getTokenFromWeb(ctx, config)
+		if err != nil {
+			return nil, fmt.Errorf("failed to refresh token from web: %w", err)
+		}
+		if err := saveToken(tokFile, tok); err != nil {
+			log.Printf("Warning: failed to save token to %s: %v", tokFile, err)
+		}
 		ts = config.TokenSource(ctx, tok)
 	}
-	return ts
+	return ts, nil
 }
 
 // Request a token from the web, then returns the retrieved token.
-func getTokenFromWeb(ctx context.Context, config *oauth2.Config) *oauth2.Token {
+func getTokenFromWeb(ctx context.Context, config *oauth2.Config) (*oauth2.Token, error) {
 	// Listen on an ephemeral localhost port and set the redirect URL accordingly.
 	authCodeChan := make(chan string, 1)
 
@@ -57,11 +73,13 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config) *oauth2.Token {
 
 	ln, err := net.Listen("tcp", "localhost:0")
 	if err != nil {
-		log.Fatalf("Unable to start HTTP server: %v", err)
+		return nil, fmt.Errorf("unable to start HTTP listener: %w", err)
 	}
 	defer ln.Close()
 	port := ln.Addr().(*net.TCPAddr).Port
-	config.RedirectURL = fmt.Sprintf("http://localhost:%d/", port)
+	// Copy config to avoid mutating caller's config
+	cfg := *config
+	cfg.RedirectURL = fmt.Sprintf("http://localhost:%d/", port)
 
 	// Use a random state to mitigate CSRF risks.
 	state, err := randomState(16)
@@ -69,8 +87,8 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config) *oauth2.Token {
 		log.Printf("Warning: failed to generate random state: %v", err)
 		state = "state-token"
 	}
-
-	authURL := config.AuthCodeURL(state, oauth2.AccessTypeOffline)
+	// Request offline access and force consent to ensure Google returns a refresh token
+	authURL := cfg.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.SetAuthURLParam("prompt", "consent"))
 	fmt.Printf("Open the following link in your browser to authorize:\n%v\n", authURL)
 
 	// HTTP handler will accept only requests that match the expected state.
@@ -97,7 +115,7 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config) *oauth2.Token {
 	// Start server using the existing listener and return on non-Shutdown errors.
 	go func() {
 		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("HTTP server error: %v", err)
+			log.Printf("HTTP server error: %v", err)
 		}
 	}()
 
@@ -124,7 +142,13 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config) *oauth2.Token {
 	var authCode string
 	select {
 	case <-time.After(5 * time.Minute):
-		log.Fatal("Timed out waiting for authorization code.")
+		// Gracefully stop the HTTP server and return an error
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			log.Printf("HTTP server shutdown error after timeout: %v", err)
+		}
+		return nil, fmt.Errorf("timed out waiting for authorization code")
 	case authCode = <-authCodeChan:
 	}
 
@@ -135,11 +159,11 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config) *oauth2.Token {
 		log.Printf("HTTP server shutdown error: %v", err)
 	}
 
-	tok, err := config.Exchange(ctx, authCode)
+	tok, err := cfg.Exchange(ctx, authCode)
 	if err != nil {
-		log.Fatalf("Unable to retrieve token from web: %v", err)
+		return nil, fmt.Errorf("unable to retrieve token from web: %w", err)
 	}
-	return tok
+	return tok, nil
 }
 
 // Retrieves a token from a local file.
@@ -162,16 +186,17 @@ func tokenFromFile(file string) (*oauth2.Token, error) {
 }
 
 // Saves a token to a file path.
-func saveToken(path string, token *oauth2.Token) {
+func saveToken(path string, token *oauth2.Token) error {
 	fmt.Printf("Saving credential file to: %s\n", path)
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
-		log.Fatalf("Unable to cache oauth token: %v", err)
+		return fmt.Errorf("unable to open token file for writing: %w", err)
 	}
 	defer f.Close()
 	if err := json.NewEncoder(f).Encode(token); err != nil {
-		log.Printf("Warning: failed to write token to file: %v", err)
+		return fmt.Errorf("failed to encode token to file: %w", err)
 	}
+	return nil
 }
 
 // randomState returns a URL-safe base64 encoded random string of n bytes.

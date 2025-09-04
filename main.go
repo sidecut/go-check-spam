@@ -226,7 +226,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("Unable to parse client secret file to config: %v", err)
 	}
-	client := getClient(ctx, config)
+	client, err := getClient(ctx, config)
+	if err != nil {
+		log.Fatalf("Unable to get authenticated client: %v", err)
+	}
 
 	srv, err := gmail.NewService(ctx, option.WithHTTPClient(client))
 	if err != nil {
