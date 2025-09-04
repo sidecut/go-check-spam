@@ -55,8 +55,3 @@ On first run the program will open your browser (or print the URL). It saves a t
 
 - Run `go test ./...` to execute unit tests.
 - Run `go mod tidy` after changing imports.
-
-If you want, I can:
-
-- Make the server bind to `127.0.0.1` instead of all interfaces.
-- Add a small README section showing how to register the redirect URI step-by-step with screenshots (text only).
