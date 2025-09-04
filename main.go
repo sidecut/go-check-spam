@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cenkalti/backoff/v5"
 	"golang.org/x/oauth2/google"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/api/gmail/v1"
 	"google.golang.org/api/option"
 )
@@ -53,7 +53,9 @@ func getSpamCounts(ctx context.Context, srv *gmail.Service) (map[string]int, err
 		// Create a time.Time object from the UTC epoch milliseconds.
 		// time.UnixMilli converts the UTC epoch milliseconds to a time.Time object
 		// representing that instant in the local system timezone.
-		emailTimeLocal := time.UnixMilli(internalDateMs)
+		// Convert the milliseconds-since-epoch to local time to get the correct
+		// local date (avoids off-by-one-day due to timezone differences).
+		emailTimeLocal := time.UnixMilli(internalDateMs).In(time.Local)
 
 		// Format the local time to get the local date string in YYYY-MM-DD format
 		emailDate := emailTimeLocal.Format("2006-01-02")
@@ -68,22 +70,26 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 	var messages []*gmail.Message
 	pageToken := ""
 
-	// Create a channel to receive messages
-	msgChan := make(chan *gmail.Message)
-	// Create a WaitGroup to track goroutines
-	var wg sync.WaitGroup
-
-	// Start a goroutine to close channels when all workers are done
-	wg.Add(1)
-	go func() {
-		wg.Wait()
-		close(msgChan)
-	}()
+	// We'll collect full messages into `messages` but fetch them using a
+	// bounded worker pool to avoid launching an unbounded number of
+	// goroutines. Use errgroup for easier error handling.
 
 	// Calculate the date 'days' ago
 	query := "after:" + cutoffDate // Gmail query to filter messages
 	fmt.Printf("Gmail query: %s\n", query)
 	total := 0
+
+	// Use a cancellable context with timeout so the whole listing/fetching
+	// process respects the -timeout flag.
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(*timeout)*time.Second)
+	defer cancel()
+
+	// Bounded concurrency for fetching full messages
+	const maxWorkers = 8
+	sem := make(chan struct{}, maxWorkers)
+
+	var mu sync.Mutex
+	var eg errgroup.Group
 
 	for {
 		req := srv.Users.Messages.List("me").LabelIds("SPAM").Q(query)
@@ -91,79 +97,78 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 			req = req.PageToken(pageToken)
 		}
 
-		r, err := backoff.Retry(ctx, func() (*gmail.ListMessagesResponse, error) {
-			// Use exponential backoff to handle rate limiting and transient errors
-			r, err := req.Do()
-
-			if err != nil {
-				if *debug {
-					log.Printf("Error fetching messages: %v", err)
-				}
+		var listResp *gmail.ListMessagesResponse
+		// Wrap the request with a context check so we exit quickly if the
+		// parent context is cancelled.
+		if err := retryWithBackoff(ctx, func() error {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
 			}
-
-			return r, err
-		}, backoff.WithBackOff(backoff.NewExponentialBackOff()))
-		// Check for errors from the backoff retry
-		if err != nil {
+			var err error
+			listResp, err = req.Do()
+			if err != nil && *debug {
+				log.Printf("Error fetching messages list: %v", err)
+			}
+			return err
+		}); err != nil {
 			return nil, fmt.Errorf("error fetching messages: %v", err)
 		}
 
-		// Process messages in parallel
-		for _, msg := range r.Messages {
-			wg.Go(func() {
-				messageId := msg.Id
+		// Process messages with bounded concurrency
+		for _, msg := range listResp.Messages {
+			m := msg
+			total++
+			fmt.Printf("\r%d", total)
+
+			sem <- struct{}{}
+			eg.Go(func() error {
+				defer func() { <-sem }()
 
 				// delay a random interval between 0 and initialDelay milliseconds to avoid hitting rate limits
 				time.Sleep(time.Duration(rand.Intn(*initialDelay)) * time.Millisecond)
 
-				fullMsg, err := backoff.Retry(ctx, func() (*gmail.Message, error) {
-					// Fetch the full message using exponential backoff
-					result, err := srv.Users.Messages.Get("me", messageId).Format("minimal").Do()
-					if err != nil {
-						if *debug {
-							log.Printf("Error fetching message %s: %v", messageId, err)
-						}
+				var fullMsg *gmail.Message
+				if err := retryWithBackoff(ctx, func() error {
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					default:
 					}
-					return result, err
-
-				}, backoff.WithBackOff(backoff.NewExponentialBackOff()))
-				if err == nil {
-					msgChan <- fullMsg
-				} else if *debug {
-					log.Printf("Error fetching message %s: %v", messageId, err)
+					var err error
+					fullMsg, err = srv.Users.Messages.Get("me", m.Id).Format("minimal").Do()
+					if err != nil && *debug {
+						log.Printf("Error fetching message %s: %v", m.Id, err)
+					}
+					return err
+				}); err != nil {
+					if *debug {
+						log.Printf("Failed to fetch message %s: %v", m.Id, err)
+					}
+					return nil // non-fatal; continue with other messages
 				}
+
+				if fullMsg != nil {
+					mu.Lock()
+					messages = append(messages, fullMsg)
+					mu.Unlock()
+				}
+				return nil
 			})
-			total++
-			fmt.Printf("\r%d", total)
 		}
 
-		pageToken = r.NextPageToken
+		pageToken = listResp.NextPageToken
 		if pageToken == "" {
 			break
 		}
 	}
 
 	fmt.Print("\r") // erase the in progress count
-	wg.Done()
 
-	// Collect results, taking no more than 60 seconds
-	// This is to prevent the program from hanging indefinitely
-	timeout := time.After(time.Duration(*timeout) * time.Second)
-	for {
-		select {
-		case msg, ok := <-msgChan:
-			if !ok {
-				msgChan = nil
-			} else {
-				messages = append(messages, msg)
-			}
-		case <-timeout:
-			return nil, fmt.Errorf("timed out waiting for messages")
-		}
-
-		if msgChan == nil {
-			break
-		}
+	// Wait for all workers to finish (or context timeout)
+	if err := eg.Wait(); err != nil {
+		return nil, err
 	}
 
 	return messages, nil
@@ -215,6 +220,9 @@ func main() {
 	flag.Parse()
 	cutoffDate = time.Now().AddDate(0, 0, -*days).Format("2006-01-02")
 
+	// Seed the random number generator used for jitter delays
+	rand.Seed(time.Now().UnixNano())
+
 	ctx := context.Background()
 	b, err := os.ReadFile("credentials.json") // Download from Google Cloud Console
 	if err != nil {
@@ -240,4 +248,33 @@ func main() {
 
 	fmt.Printf("Spam email counts for the past %v days (based on internalDate):\n", *days)
 	printSpamSummary(spamCounts)
+}
+
+// retryWithBackoff retries the provided operation with exponential backoff
+// until it succeeds or the context is cancelled.
+func retryWithBackoff(ctx context.Context, op func() error) error {
+	wait := 300 * time.Millisecond
+	maxAttempts := 8
+	for i := 0; i < maxAttempts; i++ {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		if err := op(); err == nil {
+			return nil
+		} else {
+			if i == maxAttempts-1 {
+				return err
+			}
+			jitter := time.Duration(rand.Intn(200)) * time.Millisecond
+			time.Sleep(wait + jitter)
+			wait *= 2
+			if wait > 10*time.Second {
+				wait = 10 * time.Second
+			}
+		}
+	}
+	return fmt.Errorf("retry attempts exhausted")
 }
