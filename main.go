@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
 	"golang.org/x/oauth2/google"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/api/gmail/v1"
@@ -77,7 +76,7 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) (map[string]int, 
 		var listResp *gmail.ListMessagesResponse
 		// Wrap the request with a context check so we exit quickly if the
 		// parent context is cancelled.
-		if err := backoff.Retry(func() error {
+		if err := retryWithBackoff(ctx, func() error {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -89,7 +88,7 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) (map[string]int, 
 				log.Printf("Error fetching messages list: %v", err)
 			}
 			return err
-		}, backoff.NewExponentialBackOff()); err != nil {
+		}); err != nil {
 			return nil, fmt.Errorf("error fetching messages: %v", err)
 		}
 
@@ -107,7 +106,7 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) (map[string]int, 
 				time.Sleep(time.Duration(rand.Intn(*initialDelay)) * time.Millisecond)
 
 				var fullMsg *gmail.Message
-				if err := backoff.Retry(func() error {
+				if err := retryWithBackoff(ctx, func() error {
 					select {
 					case <-ctx.Done():
 						return ctx.Err()
@@ -119,7 +118,7 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) (map[string]int, 
 						log.Printf("Error fetching message %s: %v", m.Id, err)
 					}
 					return err
-				}, backoff.NewExponentialBackOff()); err != nil {
+				}); err != nil {
 					if *debug {
 						log.Printf("Failed to fetch message %s: %v", m.Id, err)
 					}
@@ -205,8 +204,7 @@ func main() {
 	flag.Parse()
 	cutoffDate = time.Now().AddDate(0, 0, -*days).Format("2006-01-02")
 
-	// Seed the random number generator used for jitter delays
-	rand.Seed(time.Now().UnixNano())
+	// The global random number generator is automatically seeded in Go 1.20+.
 
 	ctx := context.Background()
 	b, err := os.ReadFile("credentials.json") // Download from Google Cloud Console
@@ -240,7 +238,7 @@ func main() {
 func retryWithBackoff(ctx context.Context, op func() error) error {
 	wait := 300 * time.Millisecond
 	maxAttempts := 8
-	for i := 0; i < maxAttempts; i++ {
+	for i := range maxAttempts {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
