@@ -34,7 +34,12 @@ func getTokenSource(ctx context.Context, config *oauth2.Config) oauth2.TokenSour
 	}
 
 	// Create a new TokenSource that can refresh the token
-	ts := config.TokenSource(context.Background(), tok)
+	ts := config.TokenSource(ctx, tok)
+	if _, err := ts.Token(); err != nil {
+		tok = getTokenFromWeb(ctx, config)
+		saveToken(tokFile, tok)
+		ts = config.TokenSource(ctx, tok)
+	}
 	return ts
 }
 
