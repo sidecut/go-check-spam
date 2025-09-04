@@ -24,50 +24,21 @@ var debug = flag.Bool("debug", false, "enable debug output")
 var cutoffDate string
 
 func getSpamCounts(ctx context.Context, srv *gmail.Service) (map[string]int, error) {
-	dailyCounts := make(map[string]int)
-
-	// Get all messages in the SPAM folder
-	messages, err := listSpamMessages(ctx, srv)
+	// listSpamMessages now performs counting and returns the map directly.
+	dailyCounts, err := listSpamMessages(ctx, srv)
 	if err != nil {
 		return nil, fmt.Errorf("unable to list spam messages: %v", err)
 	}
 
-	if len(messages) == 0 {
+	if len(dailyCounts) == 0 {
 		fmt.Println("No spam messages found.")
-		return dailyCounts, nil
-	}
-
-	// Process each message to extract internalDate
-	for _, m := range messages {
-		// internalDate is returned as milliseconds since epoch (assumed to be UTC/GMT)
-		internalDateMs := m.InternalDate
-
-		// Safety check for invalid dates
-		if internalDateMs <= 0 {
-			if *debug {
-				log.Printf("Warning: Invalid internalDate (%d) for message ID %s", internalDateMs, m.Id)
-			}
-			continue
-		}
-
-		// Create a time.Time object from the UTC epoch milliseconds.
-		// time.UnixMilli converts the UTC epoch milliseconds to a time.Time object
-		// representing that instant in the local system timezone.
-		// Convert the milliseconds-since-epoch to local time to get the correct
-		// local date (avoids off-by-one-day due to timezone differences).
-		emailTimeLocal := time.UnixMilli(internalDateMs).In(time.Local)
-
-		// Format the local time to get the local date string in YYYY-MM-DD format
-		emailDate := emailTimeLocal.Format("2006-01-02")
-
-		dailyCounts[emailDate]++
 	}
 
 	return dailyCounts, nil
 }
 
-func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message, error) {
-	var messages []*gmail.Message
+func listSpamMessages(ctx context.Context, srv *gmail.Service) (map[string]int, error) {
+	dailyCounts := make(map[string]int)
 	pageToken := ""
 
 	// We'll collect full messages into `messages` but fetch them using a
@@ -150,9 +121,17 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 				}
 
 				if fullMsg != nil {
-					mu.Lock()
-					messages = append(messages, fullMsg)
-					mu.Unlock()
+					// internalDate is milliseconds since epoch
+					internalDateMs := fullMsg.InternalDate
+					if internalDateMs > 0 {
+						emailTimeLocal := time.UnixMilli(internalDateMs).In(time.Local)
+						emailDate := emailTimeLocal.Format("2006-01-02")
+						mu.Lock()
+						dailyCounts[emailDate]++
+						mu.Unlock()
+					} else if *debug {
+						log.Printf("Warning: Invalid internalDate (%d) for message ID %s", internalDateMs, fullMsg.Id)
+					}
 				}
 				return nil
 			})
@@ -171,7 +150,7 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 		return nil, err
 	}
 
-	return messages, nil
+	return dailyCounts, nil
 }
 
 type outputStates int
