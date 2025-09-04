@@ -6,3 +6,6 @@ gocheckspam
 gocheckspam.exe
 
 .DS_Store
+
+# Local tokens folder sometimes created by the project
+hide\ me/
