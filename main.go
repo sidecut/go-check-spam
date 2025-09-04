@@ -21,6 +21,7 @@ var timeout = flag.Int("timeout", 60, "timeout in seconds")
 var initialDelay = flag.Int("initial-delay", 1000, "max initial delay in milliseconds before starting to fetch messages")
 var days = flag.Int("days", 30, "number of days to look back")
 var debug = flag.Bool("debug", false, "enable debug output")
+var concurrency = flag.Int("concurrency", 8, "number of concurrent workers fetching messages")
 var cutoffDate string
 
 func getSpamCounts(ctx context.Context, srv *gmail.Service) (map[string]int, error) {
@@ -56,7 +57,10 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) (map[string]int, 
 	defer cancel()
 
 	// Bounded concurrency for fetching full messages
-	const maxWorkers = 8
+	maxWorkers := *concurrency
+	if maxWorkers <= 0 {
+		maxWorkers = 1
+	}
 	sem := make(chan struct{}, maxWorkers)
 
 	var mu sync.Mutex
@@ -256,4 +260,14 @@ func retryWithBackoff(ctx context.Context, op func() error) error {
 		}
 	}
 	return fmt.Errorf("retry attempts exhausted")
+}
+
+// internalDateToDate converts gmail InternalDate (ms since epoch) to a
+// YYYY-MM-DD date string in the local timezone. Returns empty string for
+// invalid timestamps.
+func internalDateToDate(ms int64) string {
+	if ms <= 0 {
+		return ""
+	}
+	return time.UnixMilli(ms).In(time.Local).Format("2006-01-02")
 }
