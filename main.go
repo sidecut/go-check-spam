@@ -23,6 +23,7 @@ var initialDelay = flag.Int("initial-delay", 1000, "max initial delay in millise
 var days = flag.Int("days", 30, "number of days to look back")
 var debug = flag.Bool("debug", false, "enable debug output")
 var concurrency = flag.Int("concurrency", 8, "number of concurrent workers fetching messages")
+var oauthPort = flag.Int("oauth-port", 8080, "port for local OAuth callback server")
 var cutoffDate string
 
 func getSpamCounts(ctx context.Context, srv *gmail.Service) (map[string]int, error) {

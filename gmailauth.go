@@ -49,7 +49,8 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config) *oauth2.Token {
 	// interfere with global handlers. Shutdown the server after receiving
 	// the code.
 	mux := http.NewServeMux()
-	srv := &http.Server{Addr: ":8080", Handler: mux}
+	addr := fmt.Sprintf(":%d", *oauthPort)
+	srv := &http.Server{Addr: addr, Handler: mux}
 	go func() {
 		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path != "/" {
