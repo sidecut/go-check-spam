@@ -187,6 +187,7 @@ fn list_spam_messages(
 
     while Instant::now() < deadline {
         let response: ListMessagesResponse = retry_with_backoff(deadline, args.debug, || {
+            let request_timeout = remaining_timeout(deadline)?;
             let url = if page_token.is_empty() {
                 "https://gmail.googleapis.com/gmail/v1/users/me/messages".to_string()
             } else {
@@ -198,6 +199,7 @@ fn list_spam_messages(
 
             client
                 .get(&url)
+                .timeout(request_timeout)
                 .bearer_auth(&token.access_token)
                 .query(&[("labelIds", "SPAM"), ("q", query.as_str())])
                 .send()
@@ -221,13 +223,18 @@ fn list_spam_messages(
 
             pool.execute(move || {
                 if initial_delay > 0 {
-                    let delay_ms = rand::thread_rng().gen_range(0..initial_delay);
-                    thread::sleep(Duration::from_millis(delay_ms));
+                    if let Ok(remaining) = remaining_timeout(deadline) {
+                        let delay_cap = remaining.as_millis().min(initial_delay as u128) as u64;
+                        if delay_cap > 0 {
+                            let delay_ms = rand::thread_rng().gen_range(0..delay_cap);
+                            thread::sleep(Duration::from_millis(delay_ms));
+                        }
+                    }
                 }
 
-                if let Ok(message) =
-                    retry_with_backoff(deadline, debug, || fetch_message(&client, &token, &msg.id))
-                {
+                if let Ok(message) = retry_with_backoff(deadline, debug, || {
+                    fetch_message(&client, &token, &msg.id, deadline)
+                }) {
                     if let Some(internal_date) = message
                         .internal_date
                         .as_deref()
@@ -264,13 +271,20 @@ fn list_spam_messages(
     Ok(guard.clone())
 }
 
-fn fetch_message(client: &Client, token: &StoredToken, message_id: &str) -> Result<GmailMessage> {
+fn fetch_message(
+    client: &Client,
+    token: &StoredToken,
+    message_id: &str,
+    deadline: Instant,
+) -> Result<GmailMessage> {
+    let request_timeout = remaining_timeout(deadline)?;
     let url = format!(
         "https://gmail.googleapis.com/gmail/v1/users/me/messages/{}?format=minimal",
         urlencoding::encode(message_id)
     );
     let message = client
         .get(&url)
+        .timeout(request_timeout)
         .bearer_auth(&token.access_token)
         .send()
         .and_then(|resp| resp.error_for_status())?
@@ -301,7 +315,9 @@ where
                 }
 
                 let jitter = Duration::from_millis(rand::thread_rng().gen_range(0..200));
-                thread::sleep(wait + jitter);
+                let remaining = remaining_timeout(deadline)?;
+                let sleep_for = std::cmp::min(wait + jitter, remaining);
+                thread::sleep(sleep_for);
                 wait = std::cmp::min(wait * 2, Duration::from_secs(10));
             }
         }
@@ -519,6 +535,15 @@ fn to_stored_token(response: TokenResponse) -> StoredToken {
 fn load_token(path: &Path) -> Result<StoredToken> {
     let file = File::open(path).with_context(|| format!("unable to open {}", path.display()))?;
     Ok(serde_json::from_reader(file).context("unable to decode token.json")?)
+}
+
+fn remaining_timeout(deadline: Instant) -> Result<Duration> {
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    if remaining.is_zero() {
+        Err(anyhow!("operation timed out"))
+    } else {
+        Ok(remaining)
+    }
 }
 
 fn save_token(path: &Path, token: &StoredToken) -> Result<()> {
