@@ -1,4 +1,4 @@
-name: Rust
+name: go-check-spam Rust CI
 
 on:
   push:
