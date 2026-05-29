@@ -2,7 +2,8 @@ credentials.json
 token.json
 
 # Executable file
-gocheckspam
-gocheckspam.exe
+rcheckspam
+rcheckspam.exe
 
 .DS_Store
+target/
