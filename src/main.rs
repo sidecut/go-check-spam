@@ -1,7 +1,7 @@
 mod auth;
 
-use anyhow::{anyhow, Result};
-use auth::{ensure_valid_token, get_token, load_credentials, Token};
+use anyhow::{Result, anyhow};
+use auth::{Token, ensure_valid_token, get_token, load_credentials};
 use clap::Parser;
 use futures::stream::StreamExt;
 use serde::Deserialize;
