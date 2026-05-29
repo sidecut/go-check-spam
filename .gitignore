@@ -6,3 +6,4 @@ gocheckspam
 gocheckspam.exe
 
 .DS_Store
+target/

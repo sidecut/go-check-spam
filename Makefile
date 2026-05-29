@@ -1,16 +1,8 @@
-# Makefile for go-check-spam project
-# Build settings
+# Makefile for gocheckspam (Rust version)
 
-# Configuration - Change these variables as needed
 BINARY_NAME := gocheckspam
-GO_VERSION := 1.25
-MAIN_FILE := main.go
 
-# Build flags
-LDFLAGS := -s -w
-BUILD_FLAGS := -ldflags "$(LDFLAGS)"
-
-# Color output (optional)
+# Color output
 RED := \033[0;31m
 GREEN := \033[0;32m
 YELLOW := \033[0;33m
@@ -23,92 +15,74 @@ all: build
 # Build the binary
 .PHONY: build
 build:
-	@echo "Building $(BINARY_NAME)..."
-	@go build $(BUILD_FLAGS) -o $(BINARY_NAME) .
-	@echo "Build complete: $(BINARY_NAME)"
+	@echo "Building $(BINARY_NAME) in debug mode..."
+	@cargo build
+	@echo "Build complete"
 
-# Build the binary (standard, no experiments)
-.PHONY: build-standard
-build-standard:
-	@echo "Building $(BINARY_NAME) (standard build)..."
-	@go build $(BUILD_FLAGS) -o $(BINARY_NAME) .
-	@echo "Build complete: $(BINARY_NAME)"
-
-# Build for production (optimized)
+# Build optimized for production
 .PHONY: build-prod
 build-prod:
 	@echo "Building $(BINARY_NAME) for production..."
-	@CGO_ENABLED=0 go build $(BUILD_FLAGS) -a -installsuffix cgo -o $(BINARY_NAME) .
-	@echo "Production build complete: $(BINARY_NAME)"
+	@cargo build --release
+	@echo "Production build complete"
 
 # Clean build artifacts
 .PHONY: clean
 clean:
 	@echo "Cleaning build artifacts..."
-	@rm -f $(BINARY_NAME)
+	@cargo clean
 	@echo "Clean complete"
 
 # Run the application
 .PHONY: run
-run: build
+run:
 	@echo "Running $(BINARY_NAME)..."
-	@./$(BINARY_NAME)
+	@cargo run --
 
 # Run with custom flags
 .PHONY: run-debug
-run-debug: build
+run-debug:
 	@echo "Running $(BINARY_NAME) with debug enabled..."
-	@./$(BINARY_NAME) -debug
+	@cargo run -- --debug
 
 # Run with custom worker count
 .PHONY: run-workers
-run-workers: build
+run-workers:
 	@echo "Running $(BINARY_NAME) with 20 workers..."
-	@./$(BINARY_NAME) -workers 20
+	@cargo run -- --concurrency 20
 
 # Test the application
 .PHONY: test
 test:
 	@echo "Running tests..."
-	@go test -v ./...
+	@cargo test -- --nocapture
 
 # Format code
 .PHONY: fmt
 fmt:
 	@echo "Formatting code..."
-	@go fmt ./...
+	@cargo fmt
 
-# Lint code
+# Lint code (corresponds to vet/lint in Go)
 .PHONY: lint
 lint:
 	@echo "Linting code..."
-	@golangci-lint run
+	@cargo clippy --all-targets --all-features -- -D warnings
 
-# Vet code
 .PHONY: vet
-vet:
-	@echo "Vetting code..."
-	@go vet ./...
+vet: lint
 
-# Check dependencies
+# Check/download dependencies
 .PHONY: deps
 deps:
-	@echo "Downloading dependencies..."
-	@go mod download
-	@go mod verify
-
-# Update dependencies
-.PHONY: update-deps
-update-deps:
-	@echo "Updating dependencies..."
-	@go mod tidy
-	@go mod download
+	@echo "Fetching dependencies..."
+	@cargo fetch
 
 # Install the binary
 .PHONY: install
 install:
-	@echo "Installing $(BINARY_NAME)..."
-	@go install $(BUILD_FLAGS) .
+	@echo "Installing $(BINARY_NAME) to cargo bin..."
+	@cargo install --path .
 	@echo "Installation complete"
 
 # Show build info
@@ -116,26 +90,24 @@ install:
 info:
 	@echo "Build Information:"
 	@echo "  Binary Name: $(BINARY_NAME)"
-	@echo "  Go Version: $(GO_VERSION)"
-	@echo "  Build Flags: $(BUILD_FLAGS)"
-	@echo "  Go Environment:"
-	@go env
+	@rustc --version
+	@cargo --version
 
 # Cross-compile for different platforms
 .PHONY: build-linux
 build-linux:
-	@echo "Building for Linux..."
-	@GOOS=linux GOARCH=amd64 go build $(BUILD_FLAGS) -o $(BINARY_NAME)-linux .
+	@echo "Building for Linux (x86_64-unknown-linux-gnu)..."
+	@cargo build --release --target x86_64-unknown-linux-gnu
 
 .PHONY: build-windows
 build-windows:
-	@echo "Building for Windows..."
-	@GOOS=windows GOARCH=amd64 go build $(BUILD_FLAGS) -o $(BINARY_NAME)-windows.exe .
+	@echo "Building for Windows (x86_64-pc-windows-gnu)..."
+	@cargo build --release --target x86_64-pc-windows-gnu
 
 .PHONY: build-mac
 build-mac:
 	@echo "Building for macOS..."
-	@GOOS=darwin GOARCH=amd64 go build $(BUILD_FLAGS) -o $(BINARY_NAME)-mac .
+	@cargo build --release
 
 # Build for all platforms
 .PHONY: build-all
@@ -149,40 +121,29 @@ dev: clean fmt vet build
 
 # CI/CD workflow
 .PHONY: ci
-ci: clean fmt vet test build
+ci: clean fmt vet test build-prod
 	@echo "CI build complete"
 
 # Help target
 .PHONY: help
 help:
 	@echo "Available targets:"
-	@echo "  build        - Build the binary with experimental GC (fallback to standard)"
-	@echo "  build-exp    - Build with GOEXPERIMENT (forced, may fail)"
-	@echo "  build-standard - Build without any experiments"
-	@echo "  build-custom - Build with custom experiment (use EXP=<experiment>)"
+	@echo "  build        - Build the binary in debug mode"
 	@echo "  build-prod   - Build optimized production binary"
 	@echo "  clean        - Remove build artifacts"
-	@echo "  run          - Build and run the application"
+	@echo "  run          - Run the application"
 	@echo "  run-debug    - Run with debug enabled"
 	@echo "  run-workers  - Run with 20 workers"
-	@echo "  test         - Run tests (with fallback)"
-	@echo "  test-exp     - Run tests with GOEXPERIMENT (forced)"
+	@echo "  test         - Run tests"
 	@echo "  fmt          - Format code"
-	@echo "  lint         - Lint code (requires golangci-lint)"
-	@echo "  vet          - Vet code"
-	@echo "  deps         - Download dependencies"
-	@echo "  update-deps  - Update dependencies"
-	@echo "  install      - Install binary to GOPATH/bin"
-	@echo "  info         - Show build information and experiment availability"
+	@echo "  lint / vet   - Lint code using clippy"
+	@echo "  deps         - Fetch dependencies"
+	@echo "  install      - Install binary to ~/.cargo/bin"
+	@echo "  info         - Show build information"
 	@echo "  build-linux  - Cross-compile for Linux"
 	@echo "  build-windows- Cross-compile for Windows"
 	@echo "  build-mac    - Cross-compile for macOS"
 	@echo "  build-all    - Cross-compile for all platforms"
-	@echo "  dev          - Development workflow (clean, fmt, vet, build)"
-	@echo "  ci           - CI workflow (clean, fmt, vet, test, build)"
+	@echo "  dev          - Development workflow (clean, fmt, clippy, build)"
+	@echo "  ci           - CI workflow (clean, fmt, clippy, test, build-prod)"
 	@echo "  help         - Show this help message"
-	@echo ""
-	@echo "$(YELLOW)Examples:$(NC)"
-	@echo "  make build-custom EXP=rangefunc"
-	@echo "  make build-custom EXP=newinliner"
-	@echo "  make GOEXP=rangefunc build-exp"
