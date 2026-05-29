@@ -47,4 +47,3 @@ cargo build --release
 ## Notes
 
 - OAuth callback listener binds to `127.0.0.1:<port>`.
-- Existing Go files are left in the repository for reference; Rust source is in `src/main.rs`.

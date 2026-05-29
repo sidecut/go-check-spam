@@ -315,9 +315,7 @@ fn spawn_stdin_reader(tx: mpsc::Sender<String>) {
 }
 
 fn extract_query_param(path: &str, key: &str) -> Option<String> {
-    let mut parts = path.splitn(2, '?');
-    let _base = parts.next()?;
-    let query = parts.next()?;
+    let (_base, query) = path.split_once('?')?;
     for pair in query.split('&') {
         let mut kv = pair.splitn(2, '=');
         if let (Some(k), Some(v)) = (kv.next(), kv.next()) {
