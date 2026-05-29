@@ -14,7 +14,11 @@ struct Args {
     #[arg(long, default_value_t = 60, help = "timeout in seconds")]
     timeout: u64,
 
-    #[arg(long, default_value_t = 1000, help = "max initial delay in milliseconds before starting to fetch messages")]
+    #[arg(
+        long,
+        default_value_t = 1000,
+        help = "max initial delay in milliseconds before starting to fetch messages"
+    )]
     initial_delay: u64,
 
     #[arg(long, default_value_t = 30, help = "number of days to look back")]
@@ -23,10 +27,18 @@ struct Args {
     #[arg(long, help = "enable debug output")]
     debug: bool,
 
-    #[arg(long, default_value_t = 8, help = "number of concurrent workers fetching messages")]
+    #[arg(
+        long,
+        default_value_t = 8,
+        help = "number of concurrent workers fetching messages"
+    )]
     concurrency: usize,
 
-    #[arg(long, default_value_t = 8080, help = "port for local OAuth callback server")]
+    #[arg(
+        long,
+        default_value_t = 8080,
+        help = "port for local OAuth callback server"
+    )]
     oauth_port: u16,
 }
 
@@ -60,7 +72,10 @@ async fn main() {
             std::process::exit(1);
         }
         Err(_) => {
-            eprintln!("Error: process timed out after {} seconds", timeout_duration.as_secs());
+            eprintln!(
+                "Error: process timed out after {} seconds",
+                timeout_duration.as_secs()
+            );
             std::process::exit(1);
         }
     }
@@ -77,7 +92,10 @@ async fn run(args: Args) -> Result<()> {
     // Perform list and fetch in a sub-method
     let spam_counts = get_spam_counts(&args, &mut token, &creds, &cutoff_date).await?;
 
-    println!("Spam email counts for the past {} days (based on internalDate):", args.days);
+    println!(
+        "Spam email counts for the past {} days (based on internalDate):",
+        args.days
+    );
     print_spam_summary(&spam_counts, &cutoff_date);
 
     Ok(())
@@ -90,7 +108,7 @@ async fn get_spam_counts(
     cutoff_date: &str,
 ) -> Result<HashMap<String, usize>> {
     let client = reqwest::Client::new();
-    
+
     // Ensure token is valid before starting listing
     ensure_valid_token(token, creds, "token.json").await?;
 
@@ -101,7 +119,8 @@ async fn get_spam_counts(
 
     loop {
         // Build the request URL
-        let mut url = reqwest::Url::parse("https://gmail.googleapis.com/gmail/v1/users/me/messages")?;
+        let mut url =
+            reqwest::Url::parse("https://gmail.googleapis.com/gmail/v1/users/me/messages")?;
         {
             let mut query_params = url.query_pairs_mut();
             query_params.append_pair("labelIds", "SPAM");
@@ -121,7 +140,10 @@ async fn get_spam_counts(
             async move {
                 client
                     .get(url_str)
-                    .header(reqwest::header::AUTHORIZATION, format!("Bearer {}", access_token))
+                    .header(
+                        reqwest::header::AUTHORIZATION,
+                        format!("Bearer {}", access_token),
+                    )
                     .send()
                     .await?
                     .error_for_status()?
@@ -177,7 +199,10 @@ async fn get_spam_counts(
                     async move {
                         client
                             .get(url)
-                            .header(reqwest::header::AUTHORIZATION, format!("Bearer {}", access_token))
+                            .header(
+                                reqwest::header::AUTHORIZATION,
+                                format!("Bearer {}", access_token),
+                            )
                             .send()
                             .await?
                             .error_for_status()?
@@ -219,10 +244,7 @@ async fn get_spam_counts(
     Ok(daily_counts)
 }
 
-async fn retry_with_backoff<F, Fut, T, E>(
-    debug: bool,
-    op: F,
-) -> Result<T, anyhow::Error>
+async fn retry_with_backoff<F, Fut, T, E>(debug: bool, op: F) -> Result<T, anyhow::Error>
 where
     F: Fn() -> Fut,
     Fut: std::future::Future<Output = Result<T, E>>,
@@ -238,7 +260,12 @@ where
                     return Err(anyhow!("Retry attempts exhausted: {}", err));
                 }
                 if debug {
-                    eprintln!("Attempt {} failed: {}. Retrying in {:?}...", i + 1, err, wait);
+                    eprintln!(
+                        "Attempt {} failed: {}. Retrying in {:?}...",
+                        i + 1,
+                        err,
+                        wait
+                    );
                 }
                 use rand::Rng;
                 let jitter = std::time::Duration::from_millis(rand::thread_rng().gen_range(0..200));
@@ -313,14 +340,14 @@ mod tests {
     fn test_internal_date_to_date() {
         let ts_ms = 1577936645000i64; // 2020-01-02 03:04:05 UTC
         let got = internal_date_to_date(&ts_ms.to_string());
-        
+
         use chrono::TimeZone;
         let expected = chrono::Local
             .timestamp_millis_opt(ts_ms)
             .unwrap()
             .format("%Y-%m-%d")
             .to_string();
-            
+
         assert_eq!(got, expected);
         assert_eq!(internal_date_to_date("0"), "");
         assert_eq!(internal_date_to_date("-50"), "");

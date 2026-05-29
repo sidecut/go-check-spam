@@ -64,15 +64,16 @@ pub async fn get_token(creds: &CredentialsConfig, oauth_port: u16) -> Result<Tok
     let token = match load_token(TOKEN_FILE) {
         Ok(mut t) => {
             if let Err(e) = ensure_valid_token(&mut t, creds, TOKEN_FILE).await {
-                eprintln!("Warning: Failed to refresh existing token: {}. Initiating re-auth...", e);
+                eprintln!(
+                    "Warning: Failed to refresh existing token: {}. Initiating re-auth...",
+                    e
+                );
                 get_token_from_web(creds, oauth_port).await?
             } else {
                 t
             }
         }
-        Err(_) => {
-            get_token_from_web(creds, oauth_port).await?
-        }
+        Err(_) => get_token_from_web(creds, oauth_port).await?,
     };
 
     // Ensure we write it back to token.json
@@ -257,21 +258,18 @@ async fn start_callback_server(port: u16, code_tx: tokio::sync::oneshot::Sender<
         }
 
         let request = String::from_utf8_lossy(&buffer[..n]);
-        let code = request
-            .lines()
-            .next()
-            .and_then(|line| {
-                let parts: Vec<&str> = line.split_whitespace().collect();
-                if parts.len() >= 2 {
-                    let path = parts[1];
-                    let url = reqwest::Url::parse(&format!("http://localhost{}", path)).ok()?;
-                    url.query_pairs()
-                        .find(|(k, _)| k == "code")
-                        .map(|(_, v)| v.into_owned())
-                } else {
-                    None
-                }
-            });
+        let code = request.lines().next().and_then(|line| {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 2 {
+                let path = parts[1];
+                let url = reqwest::Url::parse(&format!("http://localhost{}", path)).ok()?;
+                url.query_pairs()
+                    .find(|(k, _)| k == "code")
+                    .map(|(_, v)| v.into_owned())
+            } else {
+                None
+            }
+        });
 
         if let Some(auth_code) = code {
             println!("\nReceived authorization code: {}", auth_code);
