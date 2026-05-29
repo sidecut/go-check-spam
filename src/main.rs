@@ -59,12 +59,11 @@ async fn list_spam_messages(
 
             let op = backoff::ExponentialBackoff::default();
             let response = backoff::future::retry(op, || async {
-                request
-                    .clone() // Clone request as it's consumed by .doit()
+                (&mut request)
                     .doit()
                     .await
                     .map_err(|e| {
-                        if e.is_ আচ্ছা() || e.is_redirect() || e.is_ информаশনাল() {
+                        if e.is_ আচ্ছা() || e.is_redirect() || e.is_ информाশনাল() {
                             backoff::Error::transient(e)
                         } else {
                             backoff::Error::permanent(e)
@@ -72,13 +71,13 @@ async fn list_spam_messages(
                     })
             })
             .await?;
-            
+
             let current_messages = response.1.messages.unwrap_or_default();
             if current_messages.is_empty() && page_token.is_none() {
                  // No messages at all on the first page
                 break;
             }
-            
+
             total_fetched_metadata += current_messages.len();
             if debug_enabled {
                 print!("\rFetched metadata for {} messages...", total_fetched_metadata);
@@ -131,7 +130,7 @@ async fn list_spam_messages(
                     }));
                 }
             }
-            
+
             // Wait for this batch of fetch tasks to complete
             for task in fetch_tasks {
                 let _ = task.await; // Handle potential join errors if necessary
@@ -153,7 +152,7 @@ async fn list_spam_messages(
     while let Some(msg) = rx.recv().await {
         messages.push(msg);
     }
-    
+
     if messages.is_empty() && total_fetched_metadata == 0 {
          return Err(AppError::NoSpamMessages);
     }
