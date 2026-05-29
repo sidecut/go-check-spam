@@ -1,5 +1,3 @@
-BINARY_NAME := go-check-spam
-
 .PHONY: all
 all: build
 
