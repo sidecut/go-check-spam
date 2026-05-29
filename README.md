@@ -1,57 +1,50 @@
 # go-check-spam
 
-Small CLI to count messages in the Gmail Spam label by local date (based on `internalDate`).
+Rust CLI to count messages in the Gmail Spam label by local date (based on Gmail `internalDate`).
 
 ## Prerequisites
 
-- Go 1.25+
-- A Google Cloud OAuth client credential JSON (`credentials.json`) for an OAuth Client ID (Desktop or Web).
+- Rust toolchain (stable), including `cargo`
+- Google Cloud OAuth client credentials in `credentials.json`
 
-## Getting credentials
+## Credentials setup
 
-1. Go to the Google Cloud Console → APIs & Services → Credentials.
-2. Create an OAuth 2.0 Client ID. For testing you can use "Desktop app" or "Web application".
-3. Download the JSON and save it as `credentials.json` in the project root.
-4. Add the redirect URI you will use to the OAuth client (if using a web client). For the default settings in this project use:
+1. In Google Cloud Console, go to APIs & Services -> Credentials.
+2. Create an OAuth 2.0 Client ID (Desktop or Web works).
+3. Download the JSON and place it at `credentials.json` in the project root.
+4. If using a Web OAuth client, register redirect URI matching your callback port:
+   - `http://localhost:8080/`
+   - or `http://127.0.0.1:8080/`
 
-   - `http://localhost:8080/` or
-   - `http://127.0.0.1:8080/`
+If you use `--oauth-port <PORT>`, register the matching redirect URI.
 
-   If you change `-oauth-port` pass the matching port and register the corresponding redirect URI.
-
-## Running
-
-Build and run the tool from the project root:
+## Run
 
 ```bash
-go build ./...
-./go-check-spam -oauth-port=8080 -concurrency=8 -days=30
+cargo run -- --oauth-port 8080 --concurrency 8 --days 30
 ```
 
-Flags:
+First run opens a browser (or prints a URL). After successful auth, token data is cached in `token.json`.
 
-- `-oauth-port` (default 8080) – port the local OAuth callback server listens on.
-- `-concurrency` (default 8) – number of concurrent workers fetching messages.
-- `-days` (default 30) – how many days back to count.
-- `-timeout` (default 60) – overall timeout (seconds) for listing/fetching.
-- `-initial-delay` (default 1000) – maximum jitter in milliseconds before each message fetch.
-- `-debug` – enable debug logging.
+## CLI flags
 
-On first run the program will open your browser (or print the URL). It saves a token to `token.json` in the repo root after successful authorization.
-
-## Notes & recommendations
-
-- The program currently binds to `:<port>` (all interfaces) by default. For tighter security you can modify `gmailauth.go` to bind to `127.0.0.1:<port>`.
-- If you use the Google Cloud "Web application" client, make sure the redirect URI exactly matches the `http://localhost:<port>/` you use when running.
-- For large mailboxes raise `-timeout` and/or lower `-concurrency` to avoid API rate limits.
-
-## Troubleshooting
-
-- "Unable to read client secret file": ensure `credentials.json` exists in the working directory.
-- If the browser doesn't open, copy/paste the printed URL into your browser.
-- If you see permission errors on `:80`, use a non-privileged port (e.g. 8080) and update OAuth redirect.
+- `--oauth-port` (default `8080`) local OAuth callback port
+- `--concurrency` (default `8`) concurrent Gmail message fetches
+- `--days` (default `30`) lookback window
+- `--timeout` (default `60`) overall request timeout in seconds
+- `--initial-delay` (default `1000`) max jitter in ms before each message fetch
+- `--debug` enable verbose retry/request logs
 
 ## Development
 
-- Run `go test ./...` to execute unit tests.
-- Run `go mod tidy` after changing imports.
+```bash
+cargo fmt
+cargo test
+cargo clippy -- -D warnings
+cargo build --release
+```
+
+## Notes
+
+- OAuth callback listener binds to `127.0.0.1:<port>`.
+- Existing Go files are left in the repository for reference; Rust source is in `src/main.rs`.

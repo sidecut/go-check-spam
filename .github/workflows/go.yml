@@ -1,7 +1,4 @@
-# This workflow will build a golang project
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-go
-
-name: Go
+name: Rust
 
 on:
   push:
@@ -10,14 +7,23 @@ on:
     branches: ["master"]
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+        - name: Set up Rust
+          uses: dtolnay/rust-toolchain@stable
+
+        - name: Cache cargo registry and build
+          uses: Swatinem/rust-cache@v2
+
+        - name: Format check
+          run: cargo fmt --check
+
+        - name: Clippy
+          run: cargo clippy -- -D warnings
     steps:
       - uses: actions/checkout@v4
-
+          run: cargo build --verbose
       - name: Set up Go
         uses: actions/setup-go@v4
-        with:
+          run: cargo test --verbose
           go-version: "1.24"
 
       - name: Build
