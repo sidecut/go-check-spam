@@ -520,7 +520,7 @@ fn to_stored_token(response: TokenResponse) -> StoredToken {
 
 fn load_token(path: &Path) -> Result<StoredToken> {
     let file = File::open(path).with_context(|| format!("unable to open {}", path.display()))?;
-    Ok(serde_json::from_reader(file).context("unable to decode token.json")?)
+    serde_json::from_reader(file).context("unable to decode token.json")
 }
 
 fn remaining_timeout(deadline: Instant) -> Result<Duration> {
