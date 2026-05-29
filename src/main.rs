@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::io::Write;
 
 #[derive(Parser, Debug)]
-#[command(name = "gocheckspam", about = "Checks spam emails in Gmail")]
+#[command(name = "rcheckspam", about = "Checks spam emails in Gmail")]
 struct Args {
     #[arg(long, default_value_t = 60, help = "timeout in seconds")]
     timeout: u64,

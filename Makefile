@@ -1,6 +1,6 @@
-# Makefile for gocheckspam (Rust version)
+# Makefile for rcheckspam (Rust version)
 
-BINARY_NAME := gocheckspam
+BINARY_NAME := rcheckspam
 
 # Color output
 RED := \033[0;31m
