@@ -30,7 +30,6 @@ Flags:
 - `--concurrency` (default 8) sets the number of concurrent workers fetching messages.
 - `--days` (default 30) controls how many days back to count.
 - `--timeout` (default 60) sets the overall timeout in seconds for listing and fetching.
-- `--initial-delay` (default 1000) sets the maximum jitter in milliseconds before each message fetch.
 - `--debug` enables debug logging.
 
 On first run the program opens your browser or prints the URL. It saves a token to `token.json` in the repo root after successful authorization.

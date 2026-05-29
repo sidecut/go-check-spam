@@ -1,7 +1,6 @@
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Local, NaiveDate, TimeZone, Utc};
 use clap::Parser;
-use rand::Rng;
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -23,9 +22,6 @@ const DEFAULT_CUTOFF_DATE_FORMAT: &str = "%Y-%m-%d";
 pub struct Args {
     #[arg(long, default_value_t = 60)]
     pub timeout: u64,
-
-    #[arg(long = "initial-delay", default_value_t = 1000)]
-    pub initial_delay: u64,
 
     #[arg(long, default_value_t = 30)]
     pub days: i64,
@@ -218,20 +214,9 @@ fn list_spam_messages(
             let token = token.clone();
             let counts = Arc::clone(&counts);
             let debug = args.debug;
-            let initial_delay = args.initial_delay;
             let deadline = deadline;
 
             pool.execute(move || {
-                if initial_delay > 0 {
-                    if let Ok(remaining) = remaining_timeout(deadline) {
-                        let delay_cap = remaining.as_millis().min(initial_delay as u128) as u64;
-                        if delay_cap > 0 {
-                            let delay_ms = rand::thread_rng().gen_range(0..delay_cap);
-                            thread::sleep(Duration::from_millis(delay_ms));
-                        }
-                    }
-                }
-
                 if let Ok(message) = retry_with_backoff(deadline, debug, || {
                     fetch_message(&client, &token, &msg.id, deadline)
                 }) {
@@ -299,7 +284,7 @@ fn retry_with_backoff<T, F>(deadline: Instant, debug: bool, mut op: F) -> Result
 where
     F: FnMut() -> Result<T>,
 {
-    let mut wait = Duration::from_millis(300);
+    let mut wait = Duration::from_millis(50);
     for attempt in 0..8 {
         if Instant::now() >= deadline {
             return Err(anyhow!("operation timed out"));
@@ -316,11 +301,10 @@ where
                     eprintln!("Retryable error: {}", err);
                 }
 
-                let jitter = Duration::from_millis(rand::thread_rng().gen_range(0..200));
                 let remaining = remaining_timeout(deadline)?;
-                let sleep_for = std::cmp::min(wait + jitter, remaining);
+                let sleep_for = std::cmp::min(wait, remaining);
                 thread::sleep(sleep_for);
-                wait = std::cmp::min(wait * 2, Duration::from_secs(10));
+                wait = std::cmp::min(wait * 2, Duration::from_millis(500));
             }
         }
     }
