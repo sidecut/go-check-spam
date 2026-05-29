@@ -214,7 +214,6 @@ fn list_spam_messages(
             let token = token.clone();
             let counts = Arc::clone(&counts);
             let debug = args.debug;
-            let deadline = deadline;
 
             pool.execute(move || {
                 if let Ok(message) = retry_with_backoff(deadline, debug, || {
