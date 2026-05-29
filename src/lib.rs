@@ -263,7 +263,9 @@ fn list_spam_messages(
 
     print!("\r");
     io::stdout().flush().ok();
+    println!("Draining remaining workers...");
     pool.join();
+    println!("Done.");
 
     let guard = counts
         .lock()
