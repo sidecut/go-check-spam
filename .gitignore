@@ -1,8 +1,7 @@
 credentials.json
 token.json
 
-# Executable file
-gocheckspam
-gocheckspam.exe
+# Rust build artifacts
+/target
 
 .DS_Store
