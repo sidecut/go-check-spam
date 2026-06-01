@@ -9,8 +9,11 @@ use std::time::Duration;
 use crate::Config;
 
 const BASE_URL: &str = "https://gmail.googleapis.com/gmail/v1/users/me/messages";
+/// Gmail allows up to 500 message ids per list page.
+const LIST_PAGE_SIZE: u32 = 500;
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct ListMessagesResponse {
     #[serde(default)]
     messages: Vec<MessageRef>,
@@ -51,7 +54,11 @@ pub async fn get_spam_counts(
         let mut req = client
             .get(BASE_URL)
             .bearer_auth(access_token)
-            .query(&[("labelIds", "SPAM"), ("q", query.as_str())]);
+            .query(&[
+                ("labelIds", "SPAM"),
+                ("q", query.as_str()),
+                ("maxResults", &LIST_PAGE_SIZE.to_string()),
+            ]);
         if let Some(token) = &page_token {
             req = req.query(&[("pageToken", token.as_str())]);
         }
@@ -208,4 +215,17 @@ where
     }
 
     Err(last_err.unwrap_or_else(|| anyhow!("retry attempts exhausted")))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ListMessagesResponse;
+
+    #[test]
+    fn list_response_deserializes_next_page_token() {
+        let json = r#"{"messages":[{"id":"abc"}],"nextPageToken":"page-2"}"#;
+        let resp: ListMessagesResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.messages.len(), 1);
+        assert_eq!(resp.next_page_token.as_deref(), Some("page-2"));
+    }
 }
