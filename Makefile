@@ -1,6 +1,6 @@
-# Makefile for the gocheckspam project (Rust)
+# Makefile for the rcheckspam project (Rust)
 
-BINARY_NAME := gocheckspam
+BINARY_NAME := rcheckspam
 
 .PHONY: all
 all: build

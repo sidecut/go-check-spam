@@ -9,7 +9,7 @@ use std::time::Duration;
 
 /// Count messages in the Gmail Spam label by local date (based on internalDate).
 #[derive(Parser, Debug, Clone)]
-#[command(name = "gocheckspam")]
+#[command(name = "rcheckspam")]
 struct Args {
     /// Timeout in seconds for listing/fetching messages.
     #[arg(long, default_value_t = 60)]

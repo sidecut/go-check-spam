@@ -15,7 +15,6 @@ Small CLI to count messages in the Gmail Spam label by local date (based on `int
 2. Create an OAuth 2.0 Client ID. For testing you can use "Desktop app".
 3. Download the JSON and save it as `credentials.json` in the project root.
 4. Add the redirect URI you will use to the OAuth client. For the default settings in this project use:
-
    - `http://localhost:8080/`
 
    If you change `--oauth-port` pass the matching port and register the corresponding redirect URI.
@@ -26,7 +25,7 @@ Build and run the tool from the project root:
 
 ```bash
 cargo build --release
-./target/release/gocheckspam --oauth-port 8080 --concurrency 8 --days 30
+./target/release/rcheckspam --oauth-port 8080 --concurrency 8 --days 30
 ```
 
 Or run directly with Cargo:

@@ -1,11 +1,11 @@
 [package]
-name = "gocheckspam"
+name = "rcheckspam"
 version = "0.1.0"
 edition = "2021"
 description = "CLI to count Gmail Spam messages by local date (based on internalDate)"
 
 [[bin]]
-name = "gocheckspam"
+name = "rcheckspam"
 path = "src/main.rs"
 
 [dependencies]
