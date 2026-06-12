@@ -41,7 +41,7 @@ On first run the program will open your browser (or print the URL). It saves a t
 
 ## Notes & recommendations
 
-- The program currently binds to `:<port>` (all interfaces) by default. For tighter security you can modify `gmailauth.go` to bind to `127.0.0.1:<port>`.
+- The OAuth callback server binds to `127.0.0.1:<port>` (loopback only).
 - If you use the Google Cloud "Web application" client, make sure the redirect URI exactly matches the `http://localhost:<port>/` you use when running.
 - For large mailboxes raise `-timeout` and/or lower `-concurrency` to avoid API rate limits.
 

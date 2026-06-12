@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -15,15 +16,14 @@ import (
 	"golang.org/x/oauth2"
 )
 
+// getClient retrieves a token and returns an OAuth2 HTTP client.
 func getClient(ctx context.Context, config *oauth2.Config) *http.Client {
-	// Retrieve a token, saves the token, then returns the generated client.
-	// Changed to return a TokenSource instead of an http.Client
 	ts := getTokenSource(ctx, config)
 	return oauth2.NewClient(ctx, ts)
 }
 
-// Retrieve a token, saves the token, then returns the generated client.
-// Changed to return a TokenSource instead of an http.Client
+// getTokenSource retrieves a saved token (or obtains a new one from the web)
+// and returns a TokenSource that auto-refreshes.
 func getTokenSource(ctx context.Context, config *oauth2.Config) oauth2.TokenSource {
 	tokFile := "token.json"
 	tok, err := tokenFromFile(tokFile)
@@ -43,14 +43,16 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config) *oauth2.Token {
 	fmt.Printf("Go to the following link in your browser then type the "+
 		"authorization code: \n%v\n", authURL)
 
-	var authCodeChan = make(chan string)
+	var authCodeChan = make(chan string, 2) // buffered so both senders can exit even if only one is read
 
 	// Use a non-privileged loopback port and a custom ServeMux so we don't
 	// interfere with global handlers. Shutdown the server after receiving
 	// the code.
 	mux := http.NewServeMux()
-	addr := fmt.Sprintf(":%d", *oauthPort)
+	addr := fmt.Sprintf("127.0.0.1:%d", *oauthPort)
 	srv := &http.Server{Addr: addr, Handler: mux}
+	ready := make(chan struct{})
+
 	go func() {
 		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path != "/" {
@@ -70,10 +72,19 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config) *oauth2.Token {
 			}()
 		})
 
-		if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+		listener, err := net.Listen("tcp", addr)
+		if err != nil {
+			log.Fatalf("Unable to start HTTP server: %v", err)
+		}
+		close(ready)
+
+		if err := srv.Serve(listener); !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("Unable to start HTTP server: %v", err)
 		}
 	}()
+
+	// Wait for the server to be listening before opening the browser.
+	<-ready
 
 	go func() {
 		// Wait for the user to enter the authorization code.
@@ -123,10 +134,6 @@ func tokenFromFile(file string) (*oauth2.Token, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Remove this check, as expired refresh tokens are ok.
-	// if tok.Expiry.Before(time.Now()) {
-	// 	return nil, fmt.Errorf("token is expired")
-	// }
 	return tok, err
 }
 

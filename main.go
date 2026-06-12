@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -14,6 +15,7 @@ import (
 	"golang.org/x/oauth2/google"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/api/gmail/v1"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 )
 
@@ -24,20 +26,6 @@ var debug = flag.Bool("debug", false, "enable debug output")
 var concurrency = flag.Int("concurrency", 8, "number of concurrent workers fetching messages")
 var oauthPort = flag.Int("oauth-port", 8080, "port for local OAuth callback server")
 var cutoffDate string
-
-func getSpamCounts(ctx context.Context, srv *gmail.Service) (map[string]int, error) {
-	// listSpamMessages now performs counting and returns the map directly.
-	dailyCounts, err := listSpamMessages(ctx, srv)
-	if err != nil {
-		return nil, fmt.Errorf("unable to list spam messages: %v", err)
-	}
-
-	if len(dailyCounts) == 0 {
-		fmt.Println("No spam messages found.")
-	}
-
-	return dailyCounts, nil
-}
 
 func listSpamMessages(ctx context.Context, srv *gmail.Service) (map[string]int, error) {
 	dailyCounts := make(map[string]int)
@@ -51,6 +39,7 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) (map[string]int, 
 	query := "after:" + cutoffDate // Gmail query to filter messages
 	fmt.Printf("Gmail query: %s\n", query)
 	total := 0
+	failedFetches := 0
 
 	// Use a cancellable context with timeout so the whole listing/fetching
 	// process respects the -timeout flag.
@@ -119,6 +108,9 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) (map[string]int, 
 					}
 					return err
 				}); err != nil {
+					mu.Lock()
+					failedFetches++
+					mu.Unlock()
 					if *debug {
 						log.Printf("Failed to fetch message %s: %v", m.Id, err)
 					}
@@ -128,9 +120,7 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) (map[string]int, 
 				if fullMsg != nil {
 					// internalDate is milliseconds since epoch
 					internalDateMs := fullMsg.InternalDate
-					if internalDateMs > 0 {
-						emailTimeLocal := time.UnixMilli(internalDateMs).In(time.Local)
-						emailDate := emailTimeLocal.Format("2006-01-02")
+					if emailDate := internalDateToDate(internalDateMs); emailDate != "" {
 						mu.Lock()
 						dailyCounts[emailDate]++
 						mu.Unlock()
@@ -155,48 +145,53 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) (map[string]int, 
 		return nil, err
 	}
 
+	if failedFetches > 0 {
+		fmt.Printf("Warning: %d of %d message fetches failed\n", failedFetches, total)
+	}
+
 	return dailyCounts, nil
 }
 
-type outputStates int
-
-const (
-	FirstLine outputStates = iota
-	BeforeDate
-	OnOrAfterDate
-)
-
 func printSpamSummary(spamCounts map[string]int) {
-	var dates []string
-	for date := range spamCounts {
-		dates = append(dates, date)
+	cutoff, err := time.Parse("2006-01-02", cutoffDate)
+	if err != nil {
+		log.Printf("Error parsing cutoff date: %v", err)
+		return
 	}
-	sort.Strings(dates)
 
-	total := 0
-	outputState := FirstLine
-	for _, date := range dates {
-		if date < cutoffDate {
-			outputState = BeforeDate
-			// log.Default().Printf("Switching to BEFORE_DATE for date: %s\n", date)
-		} else {
-			if outputState == BeforeDate {
-				// Print a blank line to separate sections
-				fmt.Println()
-			}
-			outputState = OnOrAfterDate
-		}
-
-		count := spamCounts[date]
-		total += count
+	// Split dates into before and after cutoff.
+	var before, after []string
+	for date := range spamCounts {
 		dateValue, err := time.Parse("2006-01-02", date)
 		if err != nil {
 			log.Printf("Error parsing date: %v", err)
 			continue
 		}
-		dayOfWeek := dateValue.Format("Mon")
-		fmt.Printf("%s %s %d\n", dayOfWeek, date, count)
+		if dateValue.Before(cutoff) {
+			before = append(before, date)
+		} else {
+			after = append(after, date)
+		}
 	}
+	sort.Strings(before)
+	sort.Strings(after)
+
+	total := 0
+	printGroup := func(dates []string) {
+		for _, date := range dates {
+			count := spamCounts[date]
+			total += count
+			dateValue, _ := time.Parse("2006-01-02", date)
+			fmt.Printf("%s %s %d\n", dateValue.Format("Mon"), date, count)
+		}
+	}
+
+	printGroup(before)
+	if len(before) > 0 && len(after) > 0 {
+		fmt.Println()
+	}
+	printGroup(after)
+
 	fmt.Printf("Total: %d\n", total)
 }
 
@@ -217,6 +212,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Unable to parse client secret file to config: %v", err)
 	}
+	config.RedirectURL = fmt.Sprintf("http://127.0.0.1:%d", *oauthPort)
 	client := getClient(ctx, config)
 
 	srv, err := gmail.NewService(ctx, option.WithHTTPClient(client))
@@ -224,9 +220,14 @@ func main() {
 		log.Fatalf("Unable to retrieve Gmail client: %v", err)
 	}
 
-	spamCounts, err := getSpamCounts(ctx, srv)
+	spamCounts, err := listSpamMessages(ctx, srv)
 	if err != nil {
-		log.Fatalf("Error getting spam counts: %v", err)
+		log.Fatalf("Unable to list spam messages: %v", err)
+	}
+
+	if len(spamCounts) == 0 {
+		fmt.Println("No spam messages found.")
+		return
 	}
 
 	fmt.Printf("Spam email counts for the past %v days (based on internalDate):\n", *days)
@@ -234,7 +235,7 @@ func main() {
 }
 
 // retryWithBackoff retries the provided operation with exponential backoff
-// until it succeeds or the context is cancelled.
+// until it succeeds, the context is cancelled, or a non-retryable error occurs.
 func retryWithBackoff(ctx context.Context, op func() error) error {
 	wait := 300 * time.Millisecond
 	maxAttempts := 8
@@ -248,6 +249,9 @@ func retryWithBackoff(ctx context.Context, op func() error) error {
 		if err := op(); err == nil {
 			return nil
 		} else {
+			if isNonRetryable(err) {
+				return err
+			}
 			if i == maxAttempts-1 {
 				return err
 			}
@@ -260,6 +264,17 @@ func retryWithBackoff(ctx context.Context, op func() error) error {
 		}
 	}
 	return fmt.Errorf("retry attempts exhausted")
+}
+
+// isNonRetryable checks whether an error is a Google API error with a
+// non-retryable HTTP status code (4xx except 429).
+func isNonRetryable(err error) bool {
+	var apiErr *googleapi.Error
+	if errors.As(err, &apiErr) {
+		code := apiErr.Code
+		return code != 429 && code >= 400 && code < 500
+	}
+	return false // non-API errors (network, etc.) are retryable
 }
 
 // internalDateToDate converts gmail InternalDate (ms since epoch) to a
