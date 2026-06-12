@@ -51,6 +51,7 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) (map[string]int, 
 	query := "after:" + cutoffDate // Gmail query to filter messages
 	fmt.Printf("Gmail query: %s\n", query)
 	total := 0
+	failedFetches := 0
 
 	// Use a cancellable context with timeout so the whole listing/fetching
 	// process respects the -timeout flag.
@@ -119,6 +120,9 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) (map[string]int, 
 					}
 					return err
 				}); err != nil {
+					mu.Lock()
+					failedFetches++
+					mu.Unlock()
 					if *debug {
 						log.Printf("Failed to fetch message %s: %v", m.Id, err)
 					}
@@ -151,6 +155,10 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) (map[string]int, 
 	// Wait for all workers to finish (or context timeout)
 	if err := eg.Wait(); err != nil {
 		return nil, err
+	}
+
+	if failedFetches > 0 {
+		fmt.Printf("Warning: %d of %d message fetches failed\n", failedFetches, total)
 	}
 
 	return dailyCounts, nil
