@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -50,6 +51,8 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config) *oauth2.Token {
 	mux := http.NewServeMux()
 	addr := fmt.Sprintf("127.0.0.1:%d", *oauthPort)
 	srv := &http.Server{Addr: addr, Handler: mux}
+	ready := make(chan struct{})
+
 	go func() {
 		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path != "/" {
@@ -69,10 +72,19 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config) *oauth2.Token {
 			}()
 		})
 
-		if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+		listener, err := net.Listen("tcp", addr)
+		if err != nil {
+			log.Fatalf("Unable to start HTTP server: %v", err)
+		}
+		close(ready)
+
+		if err := srv.Serve(listener); !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("Unable to start HTTP server: %v", err)
 		}
 	}()
+
+	// Wait for the server to be listening before opening the browser.
+	<-ready
 
 	go func() {
 		// Wait for the user to enter the authorization code.
