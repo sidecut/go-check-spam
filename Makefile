@@ -64,7 +64,7 @@ run-debug: build
 .PHONY: run-workers
 run-workers: build
 	@echo "Running $(BINARY_NAME) with 20 workers..."
-	@./$(BINARY_NAME) -workers 20
+	@./$(BINARY_NAME) -concurrency 20
 
 # Test the application
 .PHONY: test
@@ -156,26 +156,23 @@ ci: clean fmt vet test build
 .PHONY: help
 help:
 	@echo "Available targets:"
-	@echo "  build        - Build the binary with experimental GC (fallback to standard)"
-	@echo "  build-exp    - Build with GOEXPERIMENT (forced, may fail)"
+	@echo "  build        - Build the binary"
 	@echo "  build-standard - Build without any experiments"
-	@echo "  build-custom - Build with custom experiment (use EXP=<experiment>)"
 	@echo "  build-prod   - Build optimized production binary"
 	@echo "  clean        - Remove build artifacts"
 	@echo "  run          - Build and run the application"
 	@echo "  run-debug    - Run with debug enabled"
 	@echo "  run-workers  - Run with 20 workers"
-	@echo "  test         - Run tests (with fallback)"
-	@echo "  test-exp     - Run tests with GOEXPERIMENT (forced)"
+	@echo "  test         - Run tests"
 	@echo "  fmt          - Format code"
 	@echo "  lint         - Lint code (requires golangci-lint)"
 	@echo "  vet          - Vet code"
 	@echo "  deps         - Download dependencies"
 	@echo "  update-deps  - Update dependencies"
 	@echo "  install      - Install binary to GOPATH/bin"
-	@echo "  info         - Show build information and experiment availability"
+	@echo "  info         - Show build information and Go environment"
 	@echo "  build-linux  - Cross-compile for Linux"
-	@echo "  build-windows- Cross-compile for Windows"
+	@echo "  build-windows - Cross-compile for Windows"
 	@echo "  build-mac    - Cross-compile for macOS"
 	@echo "  build-all    - Cross-compile for all platforms"
 	@echo "  dev          - Development workflow (clean, fmt, vet, build)"
@@ -183,6 +180,5 @@ help:
 	@echo "  help         - Show this help message"
 	@echo ""
 	@echo "$(YELLOW)Examples:$(NC)"
-	@echo "  make build-custom EXP=rangefunc"
-	@echo "  make build-custom EXP=newinliner"
-	@echo "  make GOEXP=rangefunc build-exp"
+	@echo "  make run-workers"
+	@echo "  make build-prod"
