@@ -15,15 +15,14 @@ import (
 	"golang.org/x/oauth2"
 )
 
+// getClient retrieves a token and returns an OAuth2 HTTP client.
 func getClient(ctx context.Context, config *oauth2.Config) *http.Client {
-	// Retrieve a token, saves the token, then returns the generated client.
-	// Changed to return a TokenSource instead of an http.Client
 	ts := getTokenSource(ctx, config)
 	return oauth2.NewClient(ctx, ts)
 }
 
-// Retrieve a token, saves the token, then returns the generated client.
-// Changed to return a TokenSource instead of an http.Client
+// getTokenSource retrieves a saved token (or obtains a new one from the web)
+// and returns a TokenSource that auto-refreshes.
 func getTokenSource(ctx context.Context, config *oauth2.Config) oauth2.TokenSource {
 	tokFile := "token.json"
 	tok, err := tokenFromFile(tokFile)
