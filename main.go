@@ -150,14 +150,6 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) (map[string]int, 
 	return dailyCounts, nil
 }
 
-type outputStates int
-
-const (
-	FirstLine outputStates = iota
-	BeforeDate
-	OnOrAfterDate
-)
-
 func printSpamSummary(spamCounts map[string]int) {
 	cutoff, err := time.Parse("2006-01-02", cutoffDate)
 	if err != nil {
@@ -165,36 +157,39 @@ func printSpamSummary(spamCounts map[string]int) {
 		return
 	}
 
-	var dates []string
+	// Split dates into before and after cutoff.
+	var before, after []string
 	for date := range spamCounts {
-		dates = append(dates, date)
-	}
-	sort.Strings(dates)
-
-	total := 0
-	outputState := FirstLine
-	for _, date := range dates {
 		dateValue, err := time.Parse("2006-01-02", date)
 		if err != nil {
 			log.Printf("Error parsing date: %v", err)
 			continue
 		}
-
 		if dateValue.Before(cutoff) {
-			outputState = BeforeDate
+			before = append(before, date)
 		} else {
-			if outputState == BeforeDate {
-				// Print a blank line to separate sections
-				fmt.Println()
-			}
-			outputState = OnOrAfterDate
+			after = append(after, date)
 		}
-
-		count := spamCounts[date]
-		total += count
-		dayOfWeek := dateValue.Format("Mon")
-		fmt.Printf("%s %s %d\n", dayOfWeek, date, count)
 	}
+	sort.Strings(before)
+	sort.Strings(after)
+
+	total := 0
+	printGroup := func(dates []string) {
+		for _, date := range dates {
+			count := spamCounts[date]
+			total += count
+			dateValue, _ := time.Parse("2006-01-02", date)
+			fmt.Printf("%s %s %d\n", dateValue.Format("Mon"), date, count)
+		}
+	}
+
+	printGroup(before)
+	if len(before) > 0 && len(after) > 0 {
+		fmt.Println()
+	}
+	printGroup(after)
+
 	fmt.Printf("Total: %d\n", total)
 }
 
