@@ -173,6 +173,12 @@ const (
 )
 
 func printSpamSummary(spamCounts map[string]int) {
+	cutoff, err := time.Parse("2006-01-02", cutoffDate)
+	if err != nil {
+		log.Printf("Error parsing cutoff date: %v", err)
+		return
+	}
+
 	var dates []string
 	for date := range spamCounts {
 		dates = append(dates, date)
@@ -182,9 +188,14 @@ func printSpamSummary(spamCounts map[string]int) {
 	total := 0
 	outputState := FirstLine
 	for _, date := range dates {
-		if date < cutoffDate {
+		dateValue, err := time.Parse("2006-01-02", date)
+		if err != nil {
+			log.Printf("Error parsing date: %v", err)
+			continue
+		}
+
+		if dateValue.Before(cutoff) {
 			outputState = BeforeDate
-			// log.Default().Printf("Switching to BEFORE_DATE for date: %s\n", date)
 		} else {
 			if outputState == BeforeDate {
 				// Print a blank line to separate sections
@@ -195,11 +206,6 @@ func printSpamSummary(spamCounts map[string]int) {
 
 		count := spamCounts[date]
 		total += count
-		dateValue, err := time.Parse("2006-01-02", date)
-		if err != nil {
-			log.Printf("Error parsing date: %v", err)
-			continue
-		}
 		dayOfWeek := dateValue.Format("Mon")
 		fmt.Printf("%s %s %d\n", dayOfWeek, date, count)
 	}
