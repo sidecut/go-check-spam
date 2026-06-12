@@ -25,20 +25,6 @@ var concurrency = flag.Int("concurrency", 8, "number of concurrent workers fetch
 var oauthPort = flag.Int("oauth-port", 8080, "port for local OAuth callback server")
 var cutoffDate string
 
-func getSpamCounts(ctx context.Context, srv *gmail.Service) (map[string]int, error) {
-	// listSpamMessages now performs counting and returns the map directly.
-	dailyCounts, err := listSpamMessages(ctx, srv)
-	if err != nil {
-		return nil, fmt.Errorf("unable to list spam messages: %v", err)
-	}
-
-	if len(dailyCounts) == 0 {
-		fmt.Println("No spam messages found.")
-	}
-
-	return dailyCounts, nil
-}
-
 func listSpamMessages(ctx context.Context, srv *gmail.Service) (map[string]int, error) {
 	dailyCounts := make(map[string]int)
 	pageToken := ""
@@ -236,9 +222,14 @@ func main() {
 		log.Fatalf("Unable to retrieve Gmail client: %v", err)
 	}
 
-	spamCounts, err := getSpamCounts(ctx, srv)
+	spamCounts, err := listSpamMessages(ctx, srv)
 	if err != nil {
-		log.Fatalf("Error getting spam counts: %v", err)
+		log.Fatalf("Unable to list spam messages: %v", err)
+	}
+
+	if len(spamCounts) == 0 {
+		fmt.Println("No spam messages found.")
+		return
 	}
 
 	fmt.Printf("Spam email counts for the past %v days (based on internalDate):\n", *days)
