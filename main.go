@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -14,6 +15,7 @@ import (
 	"golang.org/x/oauth2/google"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/api/gmail/v1"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 )
 
@@ -232,7 +234,7 @@ func main() {
 }
 
 // retryWithBackoff retries the provided operation with exponential backoff
-// until it succeeds or the context is cancelled.
+// until it succeeds, the context is cancelled, or a non-retryable error occurs.
 func retryWithBackoff(ctx context.Context, op func() error) error {
 	wait := 300 * time.Millisecond
 	maxAttempts := 8
@@ -246,6 +248,9 @@ func retryWithBackoff(ctx context.Context, op func() error) error {
 		if err := op(); err == nil {
 			return nil
 		} else {
+			if isNonRetryable(err) {
+				return err
+			}
 			if i == maxAttempts-1 {
 				return err
 			}
@@ -258,6 +263,17 @@ func retryWithBackoff(ctx context.Context, op func() error) error {
 		}
 	}
 	return fmt.Errorf("retry attempts exhausted")
+}
+
+// isNonRetryable checks whether an error is a Google API error with a
+// non-retryable HTTP status code (4xx except 429).
+func isNonRetryable(err error) bool {
+	var apiErr *googleapi.Error
+	if errors.As(err, &apiErr) {
+		code := apiErr.Code
+		return code != 429 && code >= 400 && code < 500
+	}
+	return false // non-API errors (network, etc.) are retryable
 }
 
 // internalDateToDate converts gmail InternalDate (ms since epoch) to a
