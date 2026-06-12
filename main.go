@@ -212,6 +212,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Unable to parse client secret file to config: %v", err)
 	}
+	config.RedirectURL = fmt.Sprintf("http://127.0.0.1:%d", *oauthPort)
 	client := getClient(ctx, config)
 
 	srv, err := gmail.NewService(ctx, option.WithHTTPClient(client))
