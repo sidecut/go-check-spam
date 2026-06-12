@@ -122,10 +122,6 @@ func tokenFromFile(file string) (*oauth2.Token, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Remove this check, as expired refresh tokens are ok.
-	// if tok.Expiry.Before(time.Now()) {
-	// 	return nil, fmt.Errorf("token is expired")
-	// }
 	return tok, err
 }
 
