@@ -128,9 +128,7 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) (map[string]int, 
 				if fullMsg != nil {
 					// internalDate is milliseconds since epoch
 					internalDateMs := fullMsg.InternalDate
-					if internalDateMs > 0 {
-						emailTimeLocal := time.UnixMilli(internalDateMs).In(time.Local)
-						emailDate := emailTimeLocal.Format("2006-01-02")
+					if emailDate := internalDateToDate(internalDateMs); emailDate != "" {
 						mu.Lock()
 						dailyCounts[emailDate]++
 						mu.Unlock()
