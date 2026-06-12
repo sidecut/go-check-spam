@@ -43,7 +43,7 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config) *oauth2.Token {
 	fmt.Printf("Go to the following link in your browser then type the "+
 		"authorization code: \n%v\n", authURL)
 
-	var authCodeChan = make(chan string)
+	var authCodeChan = make(chan string, 2) // buffered so both senders can exit even if only one is read
 
 	// Use a non-privileged loopback port and a custom ServeMux so we don't
 	// interfere with global handlers. Shutdown the server after receiving
