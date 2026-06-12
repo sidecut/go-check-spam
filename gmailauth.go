@@ -49,7 +49,7 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config) *oauth2.Token {
 	// interfere with global handlers. Shutdown the server after receiving
 	// the code.
 	mux := http.NewServeMux()
-	addr := fmt.Sprintf("127.0.0.1:%d", *oauthPort)
+	addr := fmt.Sprintf("127.0.0.1:%d", oauthPort)
 	srv := &http.Server{Addr: addr, Handler: mux}
 	ready := make(chan struct{})
 

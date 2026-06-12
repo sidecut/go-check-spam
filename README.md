@@ -13,7 +13,6 @@ Small CLI to count messages in the Gmail Spam label by local date (based on `int
 2. Create an OAuth 2.0 Client ID. For testing you can use "Desktop app" or "Web application".
 3. Download the JSON and save it as `credentials.json` in the project root.
 4. Add the redirect URI you will use to the OAuth client (if using a web client). For the default settings in this project use:
-
    - `http://localhost:8080/` or
    - `http://127.0.0.1:8080/`
 
@@ -36,6 +35,21 @@ Flags:
 - `-timeout` (default 60) – overall timeout (seconds) for listing/fetching.
 - `-initial-delay` (default 1000) – maximum jitter in milliseconds before each message fetch.
 - `-debug` – enable debug logging.
+
+Environment variable equivalents (via Viper):
+
+- `-oauth-port` -> `GOCHECKSPAM_OAUTH_PORT`
+- `-concurrency` -> `GOCHECKSPAM_CONCURRENCY`
+- `-days` -> `GOCHECKSPAM_DAYS`
+- `-timeout` -> `GOCHECKSPAM_TIMEOUT`
+- `-initial-delay` -> `GOCHECKSPAM_INITIAL_DELAY`
+- `-debug` -> `GOCHECKSPAM_DEBUG`
+
+Example:
+
+```bash
+GOCHECKSPAM_DAYS=14 GOCHECKSPAM_CONCURRENCY=4 ./go-check-spam
+```
 
 On first run the program will open your browser (or print the URL). It saves a token to `token.json` in the repo root after successful authorization.
 
