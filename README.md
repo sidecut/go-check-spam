@@ -23,8 +23,8 @@ Small CLI to count messages in the Gmail Spam label by local date (based on `int
 Build and run the tool from the project root:
 
 ```bash
-go build ./...
-./go-check-spam -oauth-port=8080 -concurrency=8 -days=30
+go build -o gocheckspam ./cmd/gocheckspam
+./gocheckspam -oauth-port=8080 -concurrency=8 -days=30
 ```
 
 Flags:
@@ -48,7 +48,7 @@ Environment variable equivalents (via Viper):
 Example:
 
 ```bash
-GOCHECKSPAM_DAYS=14 GOCHECKSPAM_CONCURRENCY=4 ./go-check-spam
+GOCHECKSPAM_DAYS=14 GOCHECKSPAM_CONCURRENCY=4 ./gocheckspam
 ```
 
 On first run the program will open your browser (or print the URL). It saves a token to `token.json` in the repo root after successful authorization.

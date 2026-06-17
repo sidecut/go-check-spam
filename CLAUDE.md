@@ -4,21 +4,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-A small Go CLI that counts messages in the Gmail Spam label and groups them by local date, using `internalDate`. All code lives in package `main` with a flat file layout.
+A small Go CLI that counts messages in the Gmail Spam label and groups them by local date, using `internalDate`. Code is organized into a slim `cmd/gocheckspam` entry point and focused internal packages.
 
 ## Common commands
 
 Build the binary:
 
 ```bash
-go build ./...
+make build
+# or: go build -o gocheckspam ./cmd/gocheckspam
 ```
 
-Run tests (the suite covers date conversion, retry logic, and API-error classification):
+Run tests:
 
 ```bash
 go test ./...
-go test -run TestRetryWithBackoff ./...
+# run a single test
+go test -run TestCountSpamByDate ./internal/spam
 ```
 
 Check and format:
@@ -32,7 +34,7 @@ The `Makefile` wraps these; useful targets include `build`, `test`, `vet`, `fmt`
 
 ## Runtime behavior and configuration
 
-Configuration is loaded in `loadConfig` in `main.go` and uses `pflag` bound to `viper`. Each flag has an environment-variable equivalent with prefix `GOCHECKSPAM_`:
+Configuration is loaded by `internal/config.Load` using `pflag` bound to `viper`. Each flag has an environment-variable equivalent with prefix `GOCHECKSPAM_`:
 
 - `-oauth-port` / `GOCHECKSPAM_OAUTH_PORT` (default `8080`)
 - `-concurrency` / `GOCHECKSPAM_CONCURRENCY` (default `8`)
@@ -45,11 +47,13 @@ On startup the program expects `credentials.json` in the working directory, obta
 
 ## Architecture
 
-- `main.go` contains the full application: CLI/config parsing, retry/backoff logic, concurrent message fetching, and date aggregation/output.
-- `gmailauth.go` owns the OAuth2 flow: reading `token.json`, launching the local callback server, exchanging the authorization code, saving the refreshed token, and opening the browser.
-- Concurrency is controlled with an `errgroup.Group` plus a semaphore channel sized by `-concurrency`. One goroutine per message fetches the full message with `Users.Messages.Get("me", id).Format("minimal")`.
-- Gmail API calls are retried with exponential backoff via `retryWithBackoff`. `isNonRetryable` short-circuits retries for `googleapi.Error` codes in the `4xx` range except `429`.
-- Message dates are derived from `gmail.Message.InternalDate` (ms since epoch), converted to the local timezone and formatted as `2006-01-02`. The summary prints dates before the cutoff, then a blank line, then dates on or after the cutoff, with a total.
+- `cmd/gocheckspam/main.go` is the CLI entry point: load config, build the OAuth client, construct the Gmail adapter, run the spam service, and print results.
+- `internal/config` parses CLI flags and environment variables into a `Config` struct.
+- `internal/auth` owns the OAuth2 flow: reading `token.json`, launching the local callback server, exchanging the authorization code, saving the refreshed token, and opening the browser.
+- `internal/gmail` defines a `Client` interface with local `Message`/`ListResponse` types and a real adapter that wraps `*gmail.Service`. `internal/gmail/fake` provides an in-memory fake implementation for tests.
+- `internal/spam` contains the core orchestration: listing spam messages with pagination, concurrently fetching full messages (bounded by a semaphore), converting `internalDate` to local dates, and aggregating daily counts.
+- `internal/retry` implements exponential backoff retry logic for Gmail API calls. `retry.IsNonRetryable` short-circuits retries for `googleapi.Error` codes in the `4xx` range except `429`.
+- `internal/reporter` formats and prints the daily spam summary.
 
 ## Notes for working in this repo
 

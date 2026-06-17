@@ -1,4 +1,4 @@
-package main
+package retry
 
 import (
 	"context"
@@ -10,21 +10,6 @@ import (
 
 	"google.golang.org/api/googleapi"
 )
-
-func TestInternalDateToDate(t *testing.T) {
-	// 2020-01-02 03:04:05 UTC in milliseconds
-	ts := int64(1577936645000)
-	got := internalDateToDate(ts)
-	// convert to local date for expected
-	expected := time.UnixMilli(ts).In(time.Local).Format("2006-01-02")
-	if got != expected {
-		t.Fatalf("expected %s got %s", expected, got)
-	}
-
-	if internalDateToDate(0) != "" {
-		t.Fatalf("expected empty string for zero timestamp")
-	}
-}
 
 func TestIsNonRetryable(t *testing.T) {
 	tests := []struct {
@@ -45,20 +30,20 @@ func TestIsNonRetryable(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := isNonRetryable(tt.err); got != tt.expected {
-				t.Errorf("isNonRetryable(%v) = %v, want %v", tt.err, got, tt.expected)
+			if got := IsNonRetryable(tt.err); got != tt.expected {
+				t.Errorf("IsNonRetryable(%v) = %v, want %v", tt.err, got, tt.expected)
 			}
 		})
 	}
 }
 
-func TestRetryWithBackoff_Success(t *testing.T) {
+func TestDo_Success(t *testing.T) {
 	calls := 0
 	op := func() error {
 		calls++
 		return nil
 	}
-	err := retryWithBackoff(context.Background(), op)
+	err := Do(context.Background(), fastConfig(), op)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -67,7 +52,7 @@ func TestRetryWithBackoff_Success(t *testing.T) {
 	}
 }
 
-func TestRetryWithBackoff_RetryableThenSuccess(t *testing.T) {
+func TestDo_RetryableThenSuccess(t *testing.T) {
 	calls := 0
 	op := func() error {
 		calls++
@@ -76,7 +61,7 @@ func TestRetryWithBackoff_RetryableThenSuccess(t *testing.T) {
 		}
 		return nil
 	}
-	err := retryWithBackoff(context.Background(), op)
+	err := Do(context.Background(), fastConfig(), op)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -85,14 +70,14 @@ func TestRetryWithBackoff_RetryableThenSuccess(t *testing.T) {
 	}
 }
 
-func TestRetryWithBackoff_NonRetryable(t *testing.T) {
+func TestDo_NonRetryable(t *testing.T) {
 	calls := 0
 	wantErr := &googleapi.Error{Code: http.StatusForbidden}
 	op := func() error {
 		calls++
 		return wantErr
 	}
-	err := retryWithBackoff(context.Background(), op)
+	err := Do(context.Background(), fastConfig(), op)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -101,7 +86,7 @@ func TestRetryWithBackoff_NonRetryable(t *testing.T) {
 	}
 }
 
-func TestRetryWithBackoff_ContextCanceled(t *testing.T) {
+func TestDo_ContextCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	calls := 0
 	op := func() error {
@@ -111,7 +96,7 @@ func TestRetryWithBackoff_ContextCanceled(t *testing.T) {
 		}
 		return &googleapi.Error{Code: http.StatusTooManyRequests}
 	}
-	err := retryWithBackoff(ctx, op)
+	err := Do(ctx, fastConfig(), op)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -120,18 +105,27 @@ func TestRetryWithBackoff_ContextCanceled(t *testing.T) {
 	}
 }
 
-func TestRetryWithBackoff_MaxAttempts(t *testing.T) {
+func TestDo_MaxAttempts(t *testing.T) {
 	calls := 0
 	wantErr := &googleapi.Error{Code: http.StatusTooManyRequests}
 	op := func() error {
 		calls++
 		return wantErr
 	}
-	err := retryWithBackoff(context.Background(), op)
+	err := Do(context.Background(), fastConfig(), op)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
 	if calls != 8 {
 		t.Errorf("expected 8 calls (max attempts), got %d", calls)
+	}
+}
+
+func fastConfig() Config {
+	return Config{
+		Initial:     1 * time.Millisecond,
+		Max:         5 * time.Millisecond,
+		Jitter:      0,
+		MaxAttempts: 8,
 	}
 }
