@@ -21,15 +21,16 @@ import (
 	"google.golang.org/api/option"
 )
 
-var timeout int
-var initialDelay int
-var days int
-var debug bool
-var concurrency int
-var oauthPort int
-var cutoffDate string
+type Config struct {
+	Timeout      int
+	InitialDelay int
+	Days         int
+	Debug        bool
+	Concurrency  int
+	OAuthPort    int
+}
 
-func loadConfig() error {
+func loadConfig() (*Config, error) {
 	pflag.Int("timeout", 60, "timeout in seconds")
 	pflag.Int("initial-delay", 1000, "max initial delay in milliseconds before starting to fetch messages")
 	pflag.Int("days", 30, "number of days to look back")
@@ -43,40 +44,32 @@ func loadConfig() error {
 	viper.AutomaticEnv()
 
 	if err := viper.BindPFlags(pflag.CommandLine); err != nil {
-		return fmt.Errorf("failed to bind flags: %w", err)
+		return nil, fmt.Errorf("failed to bind flags: %w", err)
 	}
 
-	timeout = viper.GetInt("timeout")
-	initialDelay = viper.GetInt("initial-delay")
-	days = viper.GetInt("days")
-	debug = viper.GetBool("debug")
-	concurrency = viper.GetInt("concurrency")
-	oauthPort = viper.GetInt("oauth-port")
-
-	return nil
+	return &Config{
+		Timeout:      viper.GetInt("timeout"),
+		InitialDelay: viper.GetInt("initial-delay"),
+		Days:         viper.GetInt("days"),
+		Debug:        viper.GetBool("debug"),
+		Concurrency:  viper.GetInt("concurrency"),
+		OAuthPort:    viper.GetInt("oauth-port"),
+	}, nil
 }
 
-func listSpamMessages(ctx context.Context, srv *gmail.Service) (map[string]int, error) {
+func listSpamMessages(ctx context.Context, srv *gmail.Service, cfg *Config, cutoffDate string) (map[string]int, error) {
 	dailyCounts := make(map[string]int)
 	pageToken := ""
 
-	// We'll collect full messages into `messages` but fetch them using a
-	// bounded worker pool to avoid launching an unbounded number of
-	// goroutines. Use errgroup for easier error handling.
-
-	// Calculate the date 'days' ago
-	query := "after:" + cutoffDate // Gmail query to filter messages
+	query := "after:" + cutoffDate
 	fmt.Printf("Gmail query: %s\n", query)
 	total := 0
 	failedFetches := 0
 
-	// Use a cancellable context with timeout so the whole listing/fetching
-	// process respects the -timeout flag.
-	ctx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(cfg.Timeout)*time.Second)
 	defer cancel()
 
-	// Bounded concurrency for fetching full messages
-	maxWorkers := concurrency
+	maxWorkers := cfg.Concurrency
 	if maxWorkers <= 0 {
 		maxWorkers = 1
 	}
@@ -92,8 +85,6 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) (map[string]int, 
 		}
 
 		var listResp *gmail.ListMessagesResponse
-		// Wrap the request with a context check so we exit quickly if the
-		// parent context is cancelled.
 		if err := retryWithBackoff(ctx, func() error {
 			select {
 			case <-ctx.Done():
@@ -102,7 +93,7 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) (map[string]int, 
 			}
 			var err error
 			listResp, err = req.Do()
-			if err != nil && debug {
+			if err != nil && cfg.Debug {
 				log.Printf("Error fetching messages list: %v", err)
 			}
 			return err
@@ -110,7 +101,6 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) (map[string]int, 
 			return nil, fmt.Errorf("error fetching messages: %v", err)
 		}
 
-		// Process messages with bounded concurrency
 		for _, msg := range listResp.Messages {
 			m := msg
 			total++
@@ -120,8 +110,7 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) (map[string]int, 
 			eg.Go(func() error {
 				defer func() { <-sem }()
 
-				// delay a random interval between 0 and initialDelay milliseconds to avoid hitting rate limits
-				time.Sleep(time.Duration(rand.Intn(initialDelay)) * time.Millisecond)
+				time.Sleep(time.Duration(rand.Intn(cfg.InitialDelay)) * time.Millisecond)
 
 				var fullMsg *gmail.Message
 				if err := retryWithBackoff(ctx, func() error {
@@ -132,7 +121,7 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) (map[string]int, 
 					}
 					var err error
 					fullMsg, err = srv.Users.Messages.Get("me", m.Id).Format("minimal").Do()
-					if err != nil && debug {
+					if err != nil && cfg.Debug {
 						log.Printf("Error fetching message %s: %v", m.Id, err)
 					}
 					return err
@@ -140,21 +129,19 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) (map[string]int, 
 					mu.Lock()
 					failedFetches++
 					mu.Unlock()
-					if debug {
+					if cfg.Debug {
 						log.Printf("Failed to fetch message %s: %v", m.Id, err)
 					}
-					return nil // non-fatal; continue with other messages
+					return nil
 				}
 
 				if fullMsg != nil {
-					// internalDate is milliseconds since epoch
-					internalDateMs := fullMsg.InternalDate
-					if emailDate := internalDateToDate(internalDateMs); emailDate != "" {
+					if emailDate := internalDateToDate(fullMsg.InternalDate); emailDate != "" {
 						mu.Lock()
 						dailyCounts[emailDate]++
 						mu.Unlock()
-					} else if debug {
-						log.Printf("Warning: Invalid internalDate (%d) for message ID %s", internalDateMs, fullMsg.Id)
+					} else if cfg.Debug {
+						log.Printf("Warning: Invalid internalDate (%d) for message ID %s", fullMsg.InternalDate, fullMsg.Id)
 					}
 				}
 				return nil
@@ -167,9 +154,8 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) (map[string]int, 
 		}
 	}
 
-	fmt.Print("\r") // erase the in progress count
+	fmt.Print("\r")
 
-	// Wait for all workers to finish (or context timeout)
 	if err := eg.Wait(); err != nil {
 		return nil, err
 	}
@@ -181,14 +167,13 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) (map[string]int, 
 	return dailyCounts, nil
 }
 
-func printSpamSummary(spamCounts map[string]int) {
+func printSpamSummary(spamCounts map[string]int, cutoffDate string) {
 	cutoff, err := time.Parse("2006-01-02", cutoffDate)
 	if err != nil {
 		log.Printf("Error parsing cutoff date: %v", err)
 		return
 	}
 
-	// Split dates into before and after cutoff.
 	var before, after []string
 	for date := range spamCounts {
 		dateValue, err := time.Parse("2006-01-02", date)
@@ -225,33 +210,31 @@ func printSpamSummary(spamCounts map[string]int) {
 }
 
 func main() {
-	if err := loadConfig(); err != nil {
+	cfg, err := loadConfig()
+	if err != nil {
 		log.Fatalf("Unable to load configuration: %v", err)
 	}
-	cutoffDate = time.Now().AddDate(0, 0, -days).Format("2006-01-02")
-
-	// The global random number generator is automatically seeded in Go 1.20+.
+	cutoffDate := time.Now().AddDate(0, 0, -cfg.Days).Format("2006-01-02")
 
 	ctx := context.Background()
-	b, err := os.ReadFile("credentials.json") // Download from Google Cloud Console
+	b, err := os.ReadFile("credentials.json")
 	if err != nil {
 		log.Fatalf("Unable to read client secret file: %v", err)
 	}
 
-	// If modifying these scopes, delete your previously saved token.json.
 	config, err := google.ConfigFromJSON(b, gmail.GmailReadonlyScope)
 	if err != nil {
 		log.Fatalf("Unable to parse client secret file to config: %v", err)
 	}
-	config.RedirectURL = fmt.Sprintf("http://127.0.0.1:%d", oauthPort)
-	client := getClient(ctx, config)
+	config.RedirectURL = fmt.Sprintf("http://127.0.0.1:%d", cfg.OAuthPort)
+	client := getClient(ctx, config, cfg.OAuthPort)
 
 	srv, err := gmail.NewService(ctx, option.WithHTTPClient(client))
 	if err != nil {
 		log.Fatalf("Unable to retrieve Gmail client: %v", err)
 	}
 
-	spamCounts, err := listSpamMessages(ctx, srv)
+	spamCounts, err := listSpamMessages(ctx, srv, cfg, cutoffDate)
 	if err != nil {
 		log.Fatalf("Unable to list spam messages: %v", err)
 	}
@@ -261,8 +244,8 @@ func main() {
 		return
 	}
 
-	fmt.Printf("Spam email counts for the past %v days (based on internalDate):\n", days)
-	printSpamSummary(spamCounts)
+	fmt.Printf("Spam email counts for the past %v days (based on internalDate):\n", cfg.Days)
+	printSpamSummary(spamCounts, cutoffDate)
 }
 
 // retryWithBackoff retries the provided operation with exponential backoff
@@ -305,7 +288,7 @@ func isNonRetryable(err error) bool {
 		code := apiErr.Code
 		return code != 429 && code >= 400 && code < 500
 	}
-	return false // non-API errors (network, etc.) are retryable
+	return false
 }
 
 // internalDateToDate converts gmail InternalDate (ms since epoch) to a
