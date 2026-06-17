@@ -4,7 +4,7 @@
 # Configuration - Change these variables as needed
 BINARY_NAME := gocheckspam
 GO_VERSION := 1.25
-MAIN_FILE := main.go
+MAIN_PKG := ./cmd/gocheckspam
 
 # Build flags
 LDFLAGS := -s -w
@@ -24,21 +24,21 @@ all: build
 .PHONY: build
 build:
 	@echo "Building $(BINARY_NAME)..."
-	@go build $(BUILD_FLAGS) -o $(BINARY_NAME) .
+	@go build $(BUILD_FLAGS) -o $(BINARY_NAME) $(MAIN_PKG)
 	@echo "Build complete: $(BINARY_NAME)"
 
 # Build the binary (standard, no experiments)
 .PHONY: build-standard
 build-standard:
 	@echo "Building $(BINARY_NAME) (standard build)..."
-	@go build $(BUILD_FLAGS) -o $(BINARY_NAME) .
+	@go build $(BUILD_FLAGS) -o $(BINARY_NAME) $(MAIN_PKG)
 	@echo "Build complete: $(BINARY_NAME)"
 
 # Build for production (optimized)
 .PHONY: build-prod
 build-prod:
 	@echo "Building $(BINARY_NAME) for production..."
-	@CGO_ENABLED=0 go build $(BUILD_FLAGS) -a -installsuffix cgo -o $(BINARY_NAME) .
+	@CGO_ENABLED=0 go build $(BUILD_FLAGS) -a -installsuffix cgo -o $(BINARY_NAME) $(MAIN_PKG)
 	@echo "Production build complete: $(BINARY_NAME)"
 
 # Clean build artifacts
@@ -108,7 +108,7 @@ update-deps:
 .PHONY: install
 install:
 	@echo "Installing $(BINARY_NAME)..."
-	@go install $(BUILD_FLAGS) .
+	@go install $(BUILD_FLAGS) $(MAIN_PKG)
 	@echo "Installation complete"
 
 # Show build info
@@ -116,6 +116,7 @@ install:
 info:
 	@echo "Build Information:"
 	@echo "  Binary Name: $(BINARY_NAME)"
+	@echo "  Main Package: $(MAIN_PKG)"
 	@echo "  Go Version: $(GO_VERSION)"
 	@echo "  Build Flags: $(BUILD_FLAGS)"
 	@echo "  Go Environment:"
@@ -125,17 +126,17 @@ info:
 .PHONY: build-linux
 build-linux:
 	@echo "Building for Linux..."
-	@GOOS=linux GOARCH=amd64 go build $(BUILD_FLAGS) -o $(BINARY_NAME)-linux .
+	@GOOS=linux GOARCH=amd64 go build $(BUILD_FLAGS) -o $(BINARY_NAME)-linux $(MAIN_PKG)
 
 .PHONY: build-windows
 build-windows:
 	@echo "Building for Windows..."
-	@GOOS=windows GOARCH=amd64 go build $(BUILD_FLAGS) -o $(BINARY_NAME)-windows.exe .
+	@GOOS=windows GOARCH=amd64 go build $(BUILD_FLAGS) -o $(BINARY_NAME)-windows.exe $(MAIN_PKG)
 
 .PHONY: build-mac
 build-mac:
 	@echo "Building for macOS..."
-	@GOOS=darwin GOARCH=amd64 go build $(BUILD_FLAGS) -o $(BINARY_NAME)-mac .
+	@GOOS=darwin GOARCH=amd64 go build $(BUILD_FLAGS) -o $(BINARY_NAME)-mac $(MAIN_PKG)
 
 # Build for all platforms
 .PHONY: build-all

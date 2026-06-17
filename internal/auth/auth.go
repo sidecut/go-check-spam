@@ -1,4 +1,5 @@
-package main
+// Package auth handles OAuth2 token retrieval and refresh for Gmail access.
+package auth
 
 import (
 	"context"
@@ -16,14 +17,14 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// getClient retrieves a token and returns an OAuth2 HTTP client.
-func getClient(ctx context.Context, config *oauth2.Config, oauthPort int) *http.Client {
+// NewClient retrieves or refreshes an OAuth token and returns an HTTP client
+// authorized for Gmail access. It expects a token file named token.json in the
+// working directory and writes the token back after a fresh authorization.
+func NewClient(ctx context.Context, config *oauth2.Config, oauthPort int) *http.Client {
 	ts := getTokenSource(ctx, config, oauthPort)
 	return oauth2.NewClient(ctx, ts)
 }
 
-// getTokenSource retrieves a saved token (or obtains a new one from the web)
-// and returns a TokenSource that auto-refreshes.
 func getTokenSource(ctx context.Context, config *oauth2.Config, oauthPort int) oauth2.TokenSource {
 	tokFile := "token.json"
 	tok, err := tokenFromFile(tokFile)
@@ -32,22 +33,17 @@ func getTokenSource(ctx context.Context, config *oauth2.Config, oauthPort int) o
 		saveToken(tokFile, tok)
 	}
 
-	// Create a new TokenSource that can refresh the token
-	ts := config.TokenSource(ctx, tok)
-	return ts
+	return config.TokenSource(ctx, tok)
 }
 
-// Request a token from the web, then returns the retrieved token.
+// getTokenFromWeb requests a new token from the user via browser or terminal.
 func getTokenFromWeb(ctx context.Context, config *oauth2.Config, oauthPort int) *oauth2.Token {
 	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
 	fmt.Printf("Go to the following link in your browser then type the "+
 		"authorization code: \n%v\n", authURL)
 
-	var authCodeChan = make(chan string, 2) // buffered so both senders can exit even if only one is read
+	authCodeChan := make(chan string, 2) // buffered so both senders can exit even if only one is read
 
-	// Use a non-privileged loopback port and a custom ServeMux so we don't
-	// interfere with global handlers. Shutdown the server after receiving
-	// the code.
 	mux := http.NewServeMux()
 	addr := fmt.Sprintf("127.0.0.1:%d", oauthPort)
 	srv := &http.Server{Addr: addr, Handler: mux}
@@ -62,11 +58,9 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config, oauthPort int) 
 			authCode := r.URL.Query().Get("code")
 			fmt.Println("") // Print a newline because there's a dangling "Enter authorization code: " in the terminal
 			fmt.Printf("Received authorization code: %s\n", authCode)
-			fmt.Fprintf(w, "Authorization received. You can close this window.")
-			// Send the auth code to the channel (non-blocking by design here)
+			fmt.Fprint(w, "Authorization received. You can close this window.")
 			go func() { authCodeChan <- authCode }()
 
-			// Shutdown the server asynchronously
 			go func() {
 				_ = srv.Shutdown(context.Background())
 			}()
@@ -83,13 +77,10 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config, oauthPort int) 
 		}
 	}()
 
-	// Wait for the server to be listening before opening the browser.
 	<-ready
 
 	go func() {
-		// Wait for the user to enter the authorization code.
 		fmt.Print("Enter authorization code: ")
-
 		var authCode string
 		if _, err := fmt.Scan(&authCode); err != nil {
 			log.Fatalf("Unable to scan authorization code: %v", err)
@@ -97,16 +88,10 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config, oauthPort int) 
 		authCodeChan <- authCode
 	}()
 
-	// Open the URL in the user's browser.
-	err := openBrowser(authURL)
-	if err != nil {
+	if err := openBrowser(authURL); err != nil {
 		log.Printf("Error opening browser: %v", err)
 		log.Printf("Please manually open the URL in your browser.")
 	}
-
-	// Wait for the authorization code to be received from either the terminal *or* the web server.
-	// This is done to handle the case where the user manually enters the code in the terminal.
-	// This select statement will block until one of the two cases occurs.
 
 	var authCode string
 	select {
@@ -122,22 +107,20 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config, oauthPort int) 
 	return tok
 }
 
-// Retrieves a token from a local file.
 func tokenFromFile(file string) (*oauth2.Token, error) {
 	f, err := os.Open(file)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
+
 	tok := &oauth2.Token{}
-	err = json.NewDecoder(f).Decode(tok)
-	if err != nil {
+	if err := json.NewDecoder(f).Decode(tok); err != nil {
 		return nil, err
 	}
-	return tok, err
+	return tok, nil
 }
 
-// Saves a token to a file path.
 func saveToken(path string, token *oauth2.Token) {
 	fmt.Printf("Saving credential file to: %s\n", path)
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
@@ -145,10 +128,9 @@ func saveToken(path string, token *oauth2.Token) {
 		log.Fatalf("Unable to cache oauth token: %v", err)
 	}
 	defer f.Close()
-	json.NewEncoder(f).Encode(token)
+	_ = json.NewEncoder(f).Encode(token)
 }
 
-// openBrowser tries to open the URL in a browser, preferring the OS's default browser.
 func openBrowser(url string) error {
 	var cmd string
 	var args []string
