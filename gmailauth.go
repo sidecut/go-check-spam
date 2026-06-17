@@ -17,18 +17,18 @@ import (
 )
 
 // getClient retrieves a token and returns an OAuth2 HTTP client.
-func getClient(ctx context.Context, config *oauth2.Config) *http.Client {
-	ts := getTokenSource(ctx, config)
+func getClient(ctx context.Context, config *oauth2.Config, oauthPort int) *http.Client {
+	ts := getTokenSource(ctx, config, oauthPort)
 	return oauth2.NewClient(ctx, ts)
 }
 
 // getTokenSource retrieves a saved token (or obtains a new one from the web)
 // and returns a TokenSource that auto-refreshes.
-func getTokenSource(ctx context.Context, config *oauth2.Config) oauth2.TokenSource {
+func getTokenSource(ctx context.Context, config *oauth2.Config, oauthPort int) oauth2.TokenSource {
 	tokFile := "token.json"
 	tok, err := tokenFromFile(tokFile)
 	if err != nil {
-		tok = getTokenFromWeb(ctx, config)
+		tok = getTokenFromWeb(ctx, config, oauthPort)
 		saveToken(tokFile, tok)
 	}
 
@@ -38,7 +38,7 @@ func getTokenSource(ctx context.Context, config *oauth2.Config) oauth2.TokenSour
 }
 
 // Request a token from the web, then returns the retrieved token.
-func getTokenFromWeb(ctx context.Context, config *oauth2.Config) *oauth2.Token {
+func getTokenFromWeb(ctx context.Context, config *oauth2.Config, oauthPort int) *oauth2.Token {
 	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
 	fmt.Printf("Go to the following link in your browser then type the "+
 		"authorization code: \n%v\n", authURL)
