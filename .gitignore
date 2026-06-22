@@ -1,8 +1,8 @@
 credentials.json
 token.json
 
-# Executable file
-gocheckspam
+# Executable file (root-level binary only, not the cmd/ subdirectory)
+/gocheckspam
 gocheckspam.exe
 
 .DS_Store
