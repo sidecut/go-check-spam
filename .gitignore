@@ -2,7 +2,7 @@ credentials.json
 token.json
 
 # Executable file
-gocheckspam
+/gocheckspam
 gocheckspam.exe
 
 .DS_Store
