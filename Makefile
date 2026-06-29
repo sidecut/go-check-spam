@@ -93,7 +93,7 @@ run-debug: build
 # Run with custom worker count
 .PHONY: run-workers
 run-workers: build
-	@echo "Running $(BINARY_NAME) with 20 workers..."
+	@echo "Running $(BINARY_NAME) with a 20-request concurrency cap..."
 	@./$(BINARY_NAME) -workers 20
 
 # Test the application
@@ -215,9 +215,9 @@ help:
 	@echo "  build-custom - Build with custom experiment (use EXP=<experiment>)"
 	@echo "  build-prod   - Build optimized production binary"
 	@echo "  clean        - Remove build artifacts"
-	@echo "  run          - Build and run the application"
-	@echo "  run-debug    - Run with debug enabled"
-	@echo "  run-workers  - Run with 20 workers"
+	@echo "  run          - Build and run with default flags"
+	@echo "  run-debug    - Run with debug logging enabled"
+	@echo "  run-workers  - Run with -workers 20 to cap concurrent Gmail fetches"
 	@echo "  test         - Run tests (with fallback)"
 	@echo "  test-exp     - Run tests with GOEXPERIMENT (forced)"
 	@echo "  fmt          - Format code"
@@ -228,7 +228,7 @@ help:
 	@echo "  install      - Install binary to GOPATH/bin"
 	@echo "  info         - Show build information and experiment availability"
 	@echo "  build-linux  - Cross-compile for Linux"
-	@echo "  build-windows- Cross-compile for Windows"
+	@echo "  build-windows - Cross-compile for Windows"
 	@echo "  build-mac    - Cross-compile for macOS"
 	@echo "  build-all    - Cross-compile for all platforms"
 	@echo "  dev          - Development workflow (clean, fmt, vet, build)"
@@ -236,6 +236,8 @@ help:
 	@echo "  help         - Show this help message"
 	@echo ""
 	@echo "$(YELLOW)Examples:$(NC)"
+	@echo "  make run-workers"
+	@echo "  ./$(BINARY_NAME) -days 3 -workers 50"
 	@echo "  make build-custom EXP=rangefunc"
 	@echo "  make build-custom EXP=newinliner"
 	@echo "  make GOEXP=rangefunc build-exp"
