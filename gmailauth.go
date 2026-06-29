@@ -1,5 +1,4 @@
-// Package auth handles OAuth2 token retrieval and refresh for Gmail access.
-package auth
+package main
 
 import (
 	"context"
@@ -7,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -17,40 +15,41 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// NewClient retrieves or refreshes an OAuth token and returns an HTTP client
-// authorized for Gmail access. It expects a token file named token.json in the
-// working directory and writes the token back after a fresh authorization.
-func NewClient(ctx context.Context, config *oauth2.Config, oauthPort int) *http.Client {
-	ts := getTokenSource(ctx, config, oauthPort)
+func getClient(ctx context.Context, config *oauth2.Config) *http.Client {
+	// Retrieve a token, saves the token, then returns the generated client.
+	// Changed to return a TokenSource instead of an http.Client
+	ts := getTokenSource(ctx, config)
 	return oauth2.NewClient(ctx, ts)
 }
 
-func getTokenSource(ctx context.Context, config *oauth2.Config, oauthPort int) oauth2.TokenSource {
+// Retrieve a token, saves the token, then returns the generated client.
+// Changed to return a TokenSource instead of an http.Client
+func getTokenSource(ctx context.Context, config *oauth2.Config) oauth2.TokenSource {
 	tokFile := "token.json"
 	tok, err := tokenFromFile(tokFile)
 	if err != nil {
-		tok = getTokenFromWeb(ctx, config, oauthPort)
+		tok = getTokenFromWeb(ctx, config)
 		saveToken(tokFile, tok)
 	}
 
-	return config.TokenSource(ctx, tok)
+	// Create a new TokenSource that can refresh the token
+	ts := config.TokenSource(context.Background(), tok)
+	return ts
 }
 
-// getTokenFromWeb requests a new token from the user via browser or terminal.
-func getTokenFromWeb(ctx context.Context, config *oauth2.Config, oauthPort int) *oauth2.Token {
+// Request a token from the web, then returns the retrieved token.
+func getTokenFromWeb(ctx context.Context, config *oauth2.Config) *oauth2.Token {
 	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
 	fmt.Printf("Go to the following link in your browser then type the "+
 		"authorization code: \n%v\n", authURL)
 
-	authCodeChan := make(chan string, 2) // buffered so both senders can exit even if only one is read
+	var authCodeChan = make(chan string)
 
-	mux := http.NewServeMux()
-	addr := fmt.Sprintf("127.0.0.1:%d", oauthPort)
-	srv := &http.Server{Addr: addr, Handler: mux}
-	ready := make(chan struct{})
-
+	srv := &http.Server{Addr: ":80"}
 	go func() {
-		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// Start a web server to handle the callback and exchange the code.
+		http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			// We get several requests to the root URL, so we need to filter out the favicon request.
 			if r.URL.Path != "/" {
 				http.NotFound(w, r)
 				return
@@ -58,29 +57,23 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config, oauthPort int) 
 			authCode := r.URL.Query().Get("code")
 			fmt.Println("") // Print a newline because there's a dangling "Enter authorization code: " in the terminal
 			fmt.Printf("Received authorization code: %s\n", authCode)
-			fmt.Fprint(w, "Authorization received. You can close this window.")
-			go func() { authCodeChan <- authCode }()
+			fmt.Fprintf(w, "Authorization received. You can close this window.")
+			// Send the auth code to the channel
+			authCodeChan <- authCode
 
-			go func() {
-				_ = srv.Shutdown(context.Background())
-			}()
+			// Shutdown the server
+			// srv.Shutdown(context.Background())}
 		})
 
-		listener, err := net.Listen("tcp", addr)
-		if err != nil {
-			log.Fatalf("Unable to start HTTP server: %v", err)
-		}
-		close(ready)
-
-		if err := srv.Serve(listener); !errors.Is(err, http.ErrServerClosed) {
+		if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("Unable to start HTTP server: %v", err)
 		}
 	}()
 
-	<-ready
-
 	go func() {
+		// Wait for the user to enter the authorization code.
 		fmt.Print("Enter authorization code: ")
+
 		var authCode string
 		if _, err := fmt.Scan(&authCode); err != nil {
 			log.Fatalf("Unable to scan authorization code: %v", err)
@@ -88,10 +81,16 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config, oauthPort int) 
 		authCodeChan <- authCode
 	}()
 
-	if err := openBrowser(authURL); err != nil {
+	// Open the URL in the user's browser.
+	err := openBrowser(authURL)
+	if err != nil {
 		log.Printf("Error opening browser: %v", err)
 		log.Printf("Please manually open the URL in your browser.")
 	}
+
+	// Wait for the authorization code to be received from either the terminal *or* the web server.
+	// This is done to handle the case where the user manually enters the code in the terminal.
+	// This select statement will block until one of the two cases occurs.
 
 	var authCode string
 	select {
@@ -107,20 +106,26 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config, oauthPort int) 
 	return tok
 }
 
+// Retrieves a token from a local file.
 func tokenFromFile(file string) (*oauth2.Token, error) {
 	f, err := os.Open(file)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
-
 	tok := &oauth2.Token{}
-	if err := json.NewDecoder(f).Decode(tok); err != nil {
+	err = json.NewDecoder(f).Decode(tok)
+	if err != nil {
 		return nil, err
 	}
-	return tok, nil
+	// Remove this check, as expired refresh tokens are ok.
+	// if tok.Expiry.Before(time.Now()) {
+	// 	return nil, fmt.Errorf("token is expired")
+	// }
+	return tok, err
 }
 
+// Saves a token to a file path.
 func saveToken(path string, token *oauth2.Token) {
 	fmt.Printf("Saving credential file to: %s\n", path)
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
@@ -128,9 +133,10 @@ func saveToken(path string, token *oauth2.Token) {
 		log.Fatalf("Unable to cache oauth token: %v", err)
 	}
 	defer f.Close()
-	_ = json.NewEncoder(f).Encode(token)
+	json.NewEncoder(f).Encode(token)
 }
 
+// openBrowser tries to open the URL in a browser, preferring the OS's default browser.
 func openBrowser(url string) error {
 	var cmd string
 	var args []string
