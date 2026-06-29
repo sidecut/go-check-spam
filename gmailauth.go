@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -41,6 +43,11 @@ func getTokenSource(ctx context.Context, config *oauth2.Config) oauth2.TokenSour
 
 // Request a token from the web, then returns the retrieved token.
 func getTokenFromWeb(ctx context.Context, config *oauth2.Config) *oauth2.Token {
+	if err := ensureRedirectURLHasLocalPort(config); err != nil {
+		log.Printf("OAuth callback server unavailable: %v", err)
+		log.Printf("Continuing with manual authorization code entry.")
+	}
+
 	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
 	fmt.Printf("Go to the following link in your browser then type the "+
 		"authorization code: \n%v\n", authURL)
@@ -96,6 +103,44 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config) *oauth2.Token {
 		log.Fatalf("Unable to retrieve token from web: %v", err)
 	}
 	return tok
+}
+
+func ensureRedirectURLHasLocalPort(config *oauth2.Config) error {
+	redirectURL := strings.TrimSpace(config.RedirectURL)
+	if redirectURL == "" {
+		return fmt.Errorf("oauth redirect URL is not configured")
+	}
+
+	parsedURL, err := url.Parse(redirectURL)
+	if err != nil {
+		return fmt.Errorf("invalid oauth redirect URL %q: %w", redirectURL, err)
+	}
+	if parsedURL.Scheme != "http" {
+		return fmt.Errorf("oauth redirect URL must use http for local callback server: %s", redirectURL)
+	}
+
+	host := parsedURL.Hostname()
+	if host == "" {
+		return fmt.Errorf("oauth redirect URL is missing a host: %s", redirectURL)
+	}
+	if parsedURL.Port() != "" {
+		return nil
+	}
+
+	listener, err := net.Listen("tcp", net.JoinHostPort(host, "0"))
+	if err != nil {
+		return fmt.Errorf("unable to select a local callback port for %s: %w", redirectURL, err)
+	}
+	port := listener.Addr().(*net.TCPAddr).Port
+	if closeErr := listener.Close(); closeErr != nil {
+		return fmt.Errorf("unable to reserve callback port %d: %w", port, closeErr)
+	}
+
+	parsedURL.Host = net.JoinHostPort(host, strconv.Itoa(port))
+	config.RedirectURL = parsedURL.String()
+	log.Printf("Using OAuth redirect URL: %s", config.RedirectURL)
+
+	return nil
 }
 
 func startAuthCodeServer(config *oauth2.Config, authCodeChan chan<- string) (func(context.Context) error, error) {
