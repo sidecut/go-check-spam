@@ -47,6 +47,7 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config) *oauth2.Token {
 		log.Printf("OAuth callback server unavailable: %v", err)
 		log.Printf("Continuing with manual authorization code entry.")
 	}
+	fmt.Printf("OAuth callback URL: %s\n", config.RedirectURL)
 
 	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
 	fmt.Printf("Go to the following link in your browser then type the "+
