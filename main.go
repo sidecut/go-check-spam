@@ -20,6 +20,7 @@ import (
 var timeout = flag.Int("timeout", 60, "timeout in seconds")
 var initialDelay = flag.Int("initial-delay", 1000, "max initial delay in milliseconds before starting to fetch messages")
 var days = flag.Int("days", 30, "number of days to look back")
+var workers = flag.Int("workers", 10, "maximum number of concurrent message fetches")
 var debug = flag.Bool("debug", false, "enable debug output")
 var cutoffDate string
 
@@ -67,6 +68,8 @@ func getSpamCounts(ctx context.Context, srv *gmail.Service) (map[string]int, err
 func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message, error) {
 	var messages []*gmail.Message
 	pageToken := ""
+	workerCount := max(*workers, 1)
+	limiter := make(chan struct{}, workerCount)
 
 	// Create a channel to receive messages
 	msgChan := make(chan *gmail.Message)
@@ -110,11 +113,17 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 
 		// Process messages in parallel
 		for _, msg := range r.Messages {
+			messageId := msg.Id
 			wg.Go(func() {
-				messageId := msg.Id
+				limiter <- struct{}{}
+				defer func() {
+					<-limiter
+				}()
 
 				// delay a random interval between 0 and initialDelay milliseconds to avoid hitting rate limits
-				time.Sleep(time.Duration(rand.Intn(*initialDelay)) * time.Millisecond)
+				if *initialDelay > 0 {
+					time.Sleep(time.Duration(rand.Intn(*initialDelay)) * time.Millisecond)
+				}
 
 				fullMsg, err := backoff.Retry(ctx, func() (*gmail.Message, error) {
 					// Fetch the full message using exponential backoff
