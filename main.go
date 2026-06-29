@@ -20,7 +20,7 @@ import (
 var timeout = flag.Int("timeout", 60, "timeout in seconds")
 var initialDelay = flag.Int("initial-delay", 1000, "max initial delay in milliseconds before starting to fetch messages")
 var days = flag.Int("days", 30, "number of days to look back")
-var workers = flag.Int("workers", 10, "maximum number of concurrent message fetches")
+var workers = flag.Int("workers", 0, "maximum number of concurrent message fetches (0 = unlimited)")
 var debug = flag.Bool("debug", false, "enable debug output")
 var cutoffDate string
 
@@ -68,8 +68,10 @@ func getSpamCounts(ctx context.Context, srv *gmail.Service) (map[string]int, err
 func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message, error) {
 	var messages []*gmail.Message
 	pageToken := ""
-	workerCount := max(*workers, 1)
-	limiter := make(chan struct{}, workerCount)
+	var limiter chan struct{}
+	if *workers > 0 {
+		limiter = make(chan struct{}, *workers)
+	}
 
 	// Create a channel to receive messages
 	msgChan := make(chan *gmail.Message)
@@ -115,10 +117,12 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 		for _, msg := range r.Messages {
 			messageId := msg.Id
 			wg.Go(func() {
-				limiter <- struct{}{}
-				defer func() {
-					<-limiter
-				}()
+				if limiter != nil {
+					limiter <- struct{}{}
+					defer func() {
+						<-limiter
+					}()
+				}
 
 				// delay a random interval between 0 and initialDelay milliseconds to avoid hitting rate limits
 				if *initialDelay > 0 {
