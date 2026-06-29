@@ -1,7 +1,9 @@
 package main
 
 import (
+	"crypto/rand"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,6 +20,8 @@ import (
 
 	"golang.org/x/oauth2"
 )
+
+const oauthStateTokenBytes = 32
 
 func getClient(ctx context.Context, config *oauth2.Config) *http.Client {
 	// Retrieve a token, saves the token, then returns the generated client.
@@ -49,14 +53,19 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config) *oauth2.Token {
 	}
 	fmt.Printf("OAuth callback URL: %s\n", config.RedirectURL)
 
-	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
+	state, err := newOAuthStateToken()
+	if err != nil {
+		log.Fatalf("Unable to generate OAuth state token: %v", err)
+	}
+
+	authURL := config.AuthCodeURL(state, oauth2.AccessTypeOffline)
 	fmt.Printf("Go to the following link in your browser then type the "+
 		"authorization code: \n%v\n", authURL)
 
 	var authCodeChan = make(chan string)
 	shutdownServer := func(context.Context) error { return nil }
 
-	if shutdown, err := startAuthCodeServer(config, authCodeChan); err != nil {
+	if shutdown, err := startAuthCodeServer(config, state, authCodeChan); err != nil {
 		log.Printf("OAuth callback server unavailable: %v", err)
 		log.Printf("Continuing with manual authorization code entry.")
 	} else {
@@ -82,7 +91,7 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config) *oauth2.Token {
 	}()
 
 	// Open the URL in the user's browser.
-	err := openBrowser(authURL)
+	err = openBrowser(authURL)
 	if err != nil {
 		log.Printf("Error opening browser: %v", err)
 		log.Printf("Please manually open the URL in your browser.")
@@ -99,9 +108,9 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config) *oauth2.Token {
 	case authCode = <-authCodeChan:
 	}
 
-	tok, err := config.Exchange(ctx, authCode)
-	if err != nil {
-		log.Fatalf("Unable to retrieve token from web: %v", err)
+	tok, exchangeErr := config.Exchange(ctx, authCode)
+	if exchangeErr != nil {
+		log.Fatalf("Unable to retrieve token from web: %v", exchangeErr)
 	}
 	return tok
 }
@@ -144,7 +153,7 @@ func ensureRedirectURLHasLocalPort(config *oauth2.Config) error {
 	return nil
 }
 
-func startAuthCodeServer(config *oauth2.Config, authCodeChan chan<- string) (func(context.Context) error, error) {
+func startAuthCodeServer(config *oauth2.Config, expectedState string, authCodeChan chan<- string) (func(context.Context) error, error) {
 	redirectURL := strings.TrimSpace(config.RedirectURL)
 	if redirectURL == "" {
 		return nil, fmt.Errorf("oauth redirect URL is not configured")
@@ -171,6 +180,12 @@ func startAuthCodeServer(config *oauth2.Config, authCodeChan chan<- string) (fun
 	mux.HandleFunc(callbackPath, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != callbackPath {
 			http.NotFound(w, r)
+			return
+		}
+
+		state := r.URL.Query().Get("state")
+		if state != expectedState {
+			http.Error(w, "Invalid OAuth state.", http.StatusBadRequest)
 			return
 		}
 
@@ -203,6 +218,15 @@ func startAuthCodeServer(config *oauth2.Config, authCodeChan chan<- string) (fun
 	case <-time.After(200 * time.Millisecond):
 		return srv.Shutdown, nil
 	}
+}
+
+func newOAuthStateToken() (string, error) {
+	stateBytes := make([]byte, oauthStateTokenBytes)
+	if _, err := rand.Read(stateBytes); err != nil {
+		return "", err
+	}
+
+	return base64.RawURLEncoding.EncodeToString(stateBytes), nil
 }
 
 // Retrieves a token from a local file.
