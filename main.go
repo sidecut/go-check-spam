@@ -113,6 +113,10 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 			return nil, fmt.Errorf("error fetching messages: %v", err)
 		}
 
+		if *debug {
+			log.Printf("Fetched %d messages in this batch", len(r.Messages))
+		}
+
 		// Process messages in parallel
 		for _, msg := range r.Messages {
 			messageId := msg.Id
