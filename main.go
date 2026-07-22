@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -22,7 +23,35 @@ var initialDelay = flag.Int("initial-delay", 1000, "max initial delay in millise
 var days = flag.Int("days", 30, "number of days to look back")
 var workers = flag.Int("workers", 0, "maximum number of concurrent message fetches (0 = unlimited)")
 var debug = flag.Bool("debug", false, "enable debug output")
+var dbPathFlag = flag.String("db", "", "save results to DuckDB; use -db or -db=FILE")
 var cutoffDate string
+
+const defaultDBPath = "spam.duckdb"
+
+func prepareArgsForOptionalDBFlag(args []string) ([]string, bool, error) {
+	processed := make([]string, 0, len(args))
+	dbFlagPresent := false
+
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+
+		switch {
+		case arg == "-db" || arg == "--db":
+			dbFlagPresent = true
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				return nil, false, fmt.Errorf("use -db=FILE to specify a database name")
+			}
+			processed = append(processed, "-db=")
+		case strings.HasPrefix(arg, "-db=") || strings.HasPrefix(arg, "--db="):
+			dbFlagPresent = true
+			processed = append(processed, arg)
+		default:
+			processed = append(processed, arg)
+		}
+	}
+
+	return processed, dbFlagPresent, nil
+}
 
 func getSpamCounts(ctx context.Context, srv *gmail.Service) (map[string]int, error) {
 	dailyCounts := make(map[string]int)
@@ -229,8 +258,22 @@ func printSpamSummary(spamCounts map[string]int) {
 }
 
 func main() {
+	processedArgs, dbFlagPresent, err := prepareArgsForOptionalDBFlag(os.Args[1:])
+	if err != nil {
+		log.Fatal(err)
+	}
+	os.Args = append([]string{os.Args[0]}, processedArgs...)
+
 	flag.Parse()
 	cutoffDate = time.Now().AddDate(0, 0, -*days).Format("2006-01-02")
+
+	dbPath := ""
+	if dbFlagPresent {
+		dbPath = *dbPathFlag
+		if dbPath == "" {
+			dbPath = defaultDBPath
+		}
+	}
 
 	ctx := context.Background()
 	b, err := os.ReadFile("credentials.json") // Download from Google Cloud Console
@@ -253,6 +296,12 @@ func main() {
 	spamCounts, err := getSpamCounts(ctx, srv)
 	if err != nil {
 		log.Fatalf("Error getting spam counts: %v", err)
+	}
+
+	if dbPath != "" {
+		if err := syncSpamCounts(dbPath, spamCounts); err != nil {
+			log.Fatalf("Error syncing spam counts to %s: %v", dbPath, err)
+		}
 	}
 
 	fmt.Printf("Spam email counts for the past %v days (based on internalDate):\n", *days)
