@@ -19,7 +19,7 @@ func syncSpamCounts(dbPath string, spamCounts map[string]int, cutoffDate string)
 		CREATE TABLE IF NOT EXISTS spam_by_date (
 			date TEXT PRIMARY KEY,
 			spam_count INTEGER NOT NULL,
-			updated_at TIMESTAMP DEFAULT NOW()
+			updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 		)
 	`); err != nil {
 		return fmt.Errorf("create table: %w", err)
