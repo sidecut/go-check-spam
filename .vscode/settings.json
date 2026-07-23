@@ -1,0 +1,32 @@
+{
+  // --- Go Language Server (gopls) Settings ---
+  "go.useLanguageServer": true,
+  "gopls": {
+    "ui.completion.usePlaceholders": true,
+    "ui.diagnostic.staticcheck": true,
+    "formatting.gofumpt": true
+  },
+
+  // --- Run Formatters & Organize Imports on Save ---
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": "explicit"
+  },
+
+  // --- Go Standards: Tabs & Widths ---
+  "[go]": {
+    "editor.tabSize": 4,
+    "editor.insertSpaces": false
+  },
+
+  // --- Search & Performance Optimization ---
+  "files.exclude": {
+    "**/.git": true,
+    "**/.DS_Store": true,
+    "**/bin": true
+  },
+  "search.exclude": {
+    "**/bin": true,
+    "**/vendor": true
+  }
+}
