@@ -120,7 +120,7 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 
 		// Process messages in parallel
 		for _, msg := range r.Messages {
-			messageId := msg.Id
+			messageID := msg.Id
 			wg.Go(func() {
 				if limiter != nil {
 					limiter <- struct{}{}
@@ -136,10 +136,10 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 
 				fullMsg, err := backoff.Retry(ctx, func() (*gmail.Message, error) {
 					// Fetch the full message using exponential backoff
-					result, err := srv.Users.Messages.Get("me", messageId).Format("minimal").Do()
+					result, err := srv.Users.Messages.Get("me", messageID).Format("minimal").Do()
 					if err != nil {
 						if *debug {
-							log.Printf("Error fetching message %s: %v", messageId, err)
+							log.Printf("Error fetching message %s: %v", messageID, err)
 						}
 					}
 					return result, err
@@ -147,7 +147,7 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 				if err == nil {
 					msgChan <- fullMsg
 				} else if *debug {
-					log.Printf("Error fetching message %s: %v", messageId, err)
+					log.Printf("Error fetching message %s: %v", messageID, err)
 				}
 			})
 			total++
