@@ -1,8 +1,8 @@
 package main
 
 import (
-	"crypto/rand"
 	"context"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -62,7 +62,7 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config) *oauth2.Token {
 	fmt.Printf("Go to the following link in your browser then type the "+
 		"authorization code: \n%v\n", authURL)
 
-	var authCodeChan = make(chan string)
+	authCodeChan := make(chan string)
 	shutdownServer := func(context.Context) error { return nil }
 
 	if shutdown, err := startAuthCodeServer(config, state, authCodeChan); err != nil {
@@ -251,7 +251,7 @@ func tokenFromFile(file string) (*oauth2.Token, error) {
 // Saves a token to a file path.
 func saveToken(path string, token *oauth2.Token) {
 	fmt.Printf("Saving credential file to: %s\n", path)
-	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		log.Fatalf("Unable to cache oauth token: %v", err)
 	}
