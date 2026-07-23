@@ -299,7 +299,7 @@ func main() {
 	}
 
 	if dbPath != "" {
-		if err := syncSpamCounts(dbPath, spamCounts); err != nil {
+		if err := syncSpamCounts(dbPath, spamCounts, cutoffDate); err != nil {
 			log.Fatalf("Error syncing spam counts to %s: %v", dbPath, err)
 		}
 	}

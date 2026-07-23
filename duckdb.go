@@ -8,7 +8,7 @@ import (
 	_ "github.com/duckdb/duckdb-go/v2"
 )
 
-func syncSpamCounts(dbPath string, spamCounts map[string]int) error {
+func syncSpamCounts(dbPath string, spamCounts map[string]int, cutoffDate string) error {
 	db, err := sql.Open("duckdb", dbPath)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
@@ -55,6 +55,10 @@ func syncSpamCounts(dbPath string, spamCounts map[string]int) error {
 	sort.Strings(dates)
 
 	for _, date := range dates {
+		if date < cutoffDate {
+			continue
+		}
+
 		newCount := spamCounts[date]
 
 		var existingCount int
