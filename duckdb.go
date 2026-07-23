@@ -18,7 +18,8 @@ func syncSpamCounts(dbPath string, spamCounts map[string]int, cutoffDate string)
 	if _, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS spam_by_date (
 			date TEXT PRIMARY KEY,
-			spam_count INTEGER NOT NULL
+			spam_count INTEGER NOT NULL,
+			updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 		)
 	`); err != nil {
 		return fmt.Errorf("create table: %w", err)
@@ -42,7 +43,7 @@ func syncSpamCounts(dbPath string, spamCounts map[string]int, cutoffDate string)
 	}
 	defer insertStmt.Close()
 
-	updateStmt, err := tx.Prepare(`UPDATE spam_by_date SET spam_count = ? WHERE date = ?`)
+	updateStmt, err := tx.Prepare(`UPDATE spam_by_date SET spam_count = ?, updated_at = NOW() WHERE date = ?`)
 	if err != nil {
 		return fmt.Errorf("prepare update: %w", err)
 	}
