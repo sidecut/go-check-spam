@@ -28,5 +28,10 @@
   "search.exclude": {
     "**/bin": true,
     "**/vendor": true
-  }
+  },
+
+  // --- Go Linting Strategy ---
+  "go.lintTool": "golangci-lint",
+  "go.lintOnSave": "package",
+  "go.lintFlags": ["--fast"]
 }
