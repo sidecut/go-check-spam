@@ -18,13 +18,15 @@ import (
 	"google.golang.org/api/option"
 )
 
-var timeout = flag.Int("timeout", 60, "timeout in seconds")
-var initialDelay = flag.Int("initial-delay", 1000, "max initial delay in milliseconds before starting to fetch messages")
-var days = flag.Int("days", 30, "number of days to look back")
-var workers = flag.Int("workers", 0, "maximum number of concurrent message fetches (0 = unlimited)")
-var debug = flag.Bool("debug", false, "enable debug output")
-var dbPathFlag = flag.String("db", "", "save results to DuckDB; use -db or -db=FILE")
-var cutoffDate string
+var (
+	timeout      = flag.Int("timeout", 60, "timeout in seconds")
+	initialDelay = flag.Int("initial-delay", 1000, "max initial delay in milliseconds before starting to fetch messages")
+	days         = flag.Int("days", 30, "number of days to look back")
+	workers      = flag.Int("workers", 0, "maximum number of concurrent message fetches (0 = unlimited)")
+	debug        = flag.Bool("debug", false, "enable debug output")
+	dbPathFlag   = flag.String("db", "", "save results to DuckDB; use -db or -db=FILE")
+	cutoffDate   string
+)
 
 const defaultDBPath = "spam.duckdb"
 
@@ -128,7 +130,6 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 		r, err := backoff.Retry(ctx, func() (*gmail.ListMessagesResponse, error) {
 			// Use exponential backoff to handle rate limiting and transient errors
 			r, err := req.Do()
-
 			if err != nil {
 				if *debug {
 					log.Printf("Error fetching messages: %v", err)
@@ -148,7 +149,7 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 
 		// Process messages in parallel
 		for _, msg := range r.Messages {
-			messageId := msg.Id
+			messageID := msg.Id
 			wg.Go(func() {
 				if limiter != nil {
 					limiter <- struct{}{}
@@ -164,19 +165,18 @@ func listSpamMessages(ctx context.Context, srv *gmail.Service) ([]*gmail.Message
 
 				fullMsg, err := backoff.Retry(ctx, func() (*gmail.Message, error) {
 					// Fetch the full message using exponential backoff
-					result, err := srv.Users.Messages.Get("me", messageId).Format("minimal").Do()
+					result, err := srv.Users.Messages.Get("me", messageID).Format("minimal").Do()
 					if err != nil {
 						if *debug {
-							log.Printf("Error fetching message %s: %v", messageId, err)
+							log.Printf("Error fetching message %s: %v", messageID, err)
 						}
 					}
 					return result, err
-
 				}, backoff.WithBackOff(backoff.NewExponentialBackOff()))
 				if err == nil {
 					msgChan <- fullMsg
 				} else if *debug {
-					log.Printf("Error fetching message %s: %v", messageId, err)
+					log.Printf("Error fetching message %s: %v", messageID, err)
 				}
 			})
 			total++
