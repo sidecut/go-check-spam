@@ -34,7 +34,7 @@ func prepareArgsForOptionalDBFlag(args []string) ([]string, bool, error) {
 	processed := make([]string, 0, len(args))
 	dbFlagPresent := false
 
-	for i := 0; i < len(args); i++ {
+	for i := range args {
 		arg := args[i]
 
 		switch {
