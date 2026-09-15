@@ -3,7 +3,7 @@
 
 # Configuration - Change these variables as needed
 BINARY_NAME := gocheckspam
-GO_VERSION := 1.25
+GO_VERSION := 1.27
 MAIN_FILE := main.go
 
 # Build flags
