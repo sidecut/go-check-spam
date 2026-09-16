@@ -1,0 +1,11 @@
+.git
+.github
+.idea
+.vscode
+.DS_Store
+
+credentials.json
+token.json
+*.duckdb
+gocheckspam
+*.exe
